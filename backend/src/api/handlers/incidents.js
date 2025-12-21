@@ -8,10 +8,7 @@ const { listGroupingDecisionsForIncident } = require("../../db/queries/grouping_
 const { listSummariesForIncident } = require("../../db/queries/summaries");
 const { listRollupsForIncident } = require("../../db/queries/rollups");
 const { listLocationsForSubject } = require("../../db/queries/locations");
-
-function parseUrl(req) {
-  return new URL(req.url, `http://${req.headers.host}`);
-}
+const { parseListFilters } = require("./filters");
 
 function sendJson(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -19,10 +16,17 @@ function sendJson(res, status, payload) {
 }
 
 async function listIncidentsHandler(req, res, { db }) {
-  const url = parseUrl(req);
-  const limit = Number(url.searchParams.get("limit") || 50);
-  const offset = Number(url.searchParams.get("offset") || 0);
-  const result = listIncidents(db, { limit, offset });
+  const filters = parseListFilters(req);
+  const result = listIncidents(db, {
+    limit: filters.limit,
+    offset: filters.offset,
+    start: filters.start,
+    end: filters.end,
+    incidentType: filters.incidentType,
+    jurisdiction: filters.jurisdiction,
+    status: filters.status,
+    minConfidence: filters.minConfidence
+  });
   sendJson(res, 200, result);
 }
 

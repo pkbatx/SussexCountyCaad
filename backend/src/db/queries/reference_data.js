@@ -1,14 +1,28 @@
+function normalizeKey(value) {
+  if (!value) {
+    return "";
+  }
+  return String(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 function listReferenceCandidates(db, { refType, query, limit = 10 } = {}) {
-  const search = query ? `%${String(query).toLowerCase()}%` : null;
+  const normalized = query ? normalizeKey(query) : null;
+  const search = normalized ? `%${normalized}%` : null;
+  const lower = query ? `%${String(query).toLowerCase()}%` : null;
   const rows = db
     .prepare(
-      "SELECT * FROM reference_data WHERE ref_type = ? AND active = 1 AND (? IS NULL OR LOWER(canonical_name) LIKE ? OR LOWER(aliases_json) LIKE ?) ORDER BY canonical_name ASC LIMIT ?"
+      "SELECT * FROM reference_data WHERE ref_type = ? AND active = 1 AND (? IS NULL OR normalized_key LIKE ? OR LOWER(canonical_name) LIKE ? OR LOWER(aliases_json) LIKE ? OR LOWER(raw_address) LIKE ?) ORDER BY canonical_name ASC LIMIT ?"
     )
-    .all(refType, search, search, search, limit);
+    .all(refType, search, search, lower, lower, lower, limit);
 
   return rows.map((row) => ({
     ...row,
-    aliases: row.aliases_json ? JSON.parse(row.aliases_json) : []
+    aliases: row.aliases_json ? JSON.parse(row.aliases_json) : [],
+    metadata: row.metadata_json ? JSON.parse(row.metadata_json) : {}
   }));
 }
 
@@ -56,5 +70,6 @@ function findReferenceCandidatesForText(db, { text, limitPerType = 10 } = {}) {
 
 module.exports = {
   listReferenceCandidates,
-  findReferenceCandidatesForText
+  findReferenceCandidatesForText,
+  normalizeKey
 };

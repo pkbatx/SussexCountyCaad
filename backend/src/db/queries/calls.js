@@ -4,10 +4,23 @@ function getCallById(db, callId) {
     .get(callId);
 }
 
-function listCalls(db, { status, limit = 50, offset = 0, q } = {}) {
+function listCalls(
+  db,
+  {
+    status,
+    limit = 50,
+    offset = 0,
+    q,
+    start,
+    end,
+    incidentType,
+    jurisdiction,
+    minConfidence
+  } = {}
+) {
   const clauses = [];
   const params = [];
-  if (status) {
+  if (status && status !== "any") {
     clauses.push("status = ?");
     params.push(status);
   }
@@ -15,14 +28,36 @@ function listCalls(db, { status, limit = 50, offset = 0, q } = {}) {
     clauses.push("source_path LIKE ?");
     params.push(`%${q}%`);
   }
+  if (start) {
+    clauses.push("calls.first_seen_at >= ?");
+    params.push(start);
+  }
+  if (end) {
+    clauses.push("calls.first_seen_at <= ?");
+    params.push(end);
+  }
+  if (incidentType) {
+    clauses.push("json_extract(meta.payload_json, '$.incident_type') = ?");
+    params.push(incidentType);
+  }
+  if (jurisdiction) {
+    clauses.push("json_extract(meta.payload_json, '$.jurisdiction') = ?");
+    params.push(jurisdiction);
+  }
+  if (typeof minConfidence === "number") {
+    clauses.push("COALESCE(gd.confidence, 0) >= ?");
+    params.push(minConfidence);
+  }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const items = db
     .prepare(
-      `SELECT * FROM calls ${where} ORDER BY first_seen_at DESC LIMIT ? OFFSET ?`
+      `SELECT calls.*, json_extract(meta.payload_json, '$.incident_type') as incident_type, json_extract(meta.payload_json, '$.priority') as priority, json_extract(meta.payload_json, '$.jurisdiction') as jurisdiction, json_extract(meta.payload_json, '$.address_normalized') as address_normalized, json_extract(meta.payload_json, '$.address_raw') as address_raw, gd.confidence as grouping_confidence FROM calls LEFT JOIN metadata_extracts meta ON meta.call_id = calls.call_id AND meta.created_at = (SELECT MAX(created_at) FROM metadata_extracts WHERE call_id = calls.call_id) LEFT JOIN grouping_decisions gd ON gd.call_id = calls.call_id AND gd.created_at = (SELECT MAX(created_at) FROM grouping_decisions WHERE call_id = calls.call_id) ${where} ORDER BY calls.first_seen_at DESC LIMIT ? OFFSET ?`
     )
     .all(...params, limit, offset);
   const total = db
-    .prepare(`SELECT COUNT(1) as count FROM calls ${where}`)
+    .prepare(
+      `SELECT COUNT(1) as count FROM calls LEFT JOIN metadata_extracts meta ON meta.call_id = calls.call_id AND meta.created_at = (SELECT MAX(created_at) FROM metadata_extracts WHERE call_id = calls.call_id) LEFT JOIN grouping_decisions gd ON gd.call_id = calls.call_id AND gd.created_at = (SELECT MAX(created_at) FROM grouping_decisions WHERE call_id = calls.call_id) ${where}`
+    )
     .get(...params).count;
   return { items, total };
 }

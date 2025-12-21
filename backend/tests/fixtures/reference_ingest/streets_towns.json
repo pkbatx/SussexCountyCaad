@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "streets": {
+      "all": ["Main St"],
+      "match_map": {
+        "MAIN ST": "Main St",
+        "MAIN STREET": "Main St"
+      }
+    },
+    "towns": {
+      "all": ["Andover"],
+      "match_map": {
+        "ANDOVER": "Andover"
+      }
+    }
+  },
+  "normalization": {
+    "match_key_rule": "uppercase; squeeze whitespace; strip punctuation to [A-Z0-9 ]",
+    "street_suffix_canonical": {
+      "ST": ["ST", "STREET"]
+    }
+  },
+  "phrases": []
+}

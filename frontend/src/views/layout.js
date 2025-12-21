@@ -1,4 +1,4 @@
-export function renderLayout(target, { title, body }) {
+export function renderLayout(target, { title, body, sidebar, main, summary }) {
   target.innerHTML = "";
 
   const header = document.createElement("header");
@@ -12,24 +12,47 @@ export function renderLayout(target, { title, body }) {
     </nav>
   `;
 
-  const main = document.createElement("main");
-  main.className = "app-main";
-  const heading = document.createElement("h1");
+  const shell = document.createElement("main");
+  shell.className = "app-shell";
+
+  const heading = document.createElement("div");
+  heading.className = "page-heading";
   heading.textContent = title;
-  const content = document.createElement("div");
-  content.className = "content";
-  if (body) {
-    content.appendChild(body);
+
+  const summarySlot = document.createElement("div");
+  summarySlot.className = "summary-strip";
+  if (summary) {
+    summarySlot.appendChild(summary);
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "app-grid";
+
+  const sidebarPanel = document.createElement("section");
+  sidebarPanel.className = "panel panel-sidebar";
+  if (sidebar) {
+    sidebarPanel.appendChild(sidebar);
+  }
+
+  const mainPanel = document.createElement("section");
+  mainPanel.className = "panel panel-main";
+  const mainContent = main || body;
+  if (mainContent) {
+    mainPanel.appendChild(mainContent);
   } else {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     empty.textContent = "No data available.";
-    content.appendChild(empty);
+    mainPanel.appendChild(empty);
   }
 
-  main.appendChild(heading);
-  main.appendChild(content);
+  grid.appendChild(sidebarPanel);
+  grid.appendChild(mainPanel);
+
+  shell.appendChild(heading);
+  shell.appendChild(summarySlot);
+  shell.appendChild(grid);
 
   target.appendChild(header);
-  target.appendChild(main);
+  target.appendChild(shell);
 }

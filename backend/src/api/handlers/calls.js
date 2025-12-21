@@ -3,10 +3,7 @@ const { getStagesForCall } = require("../../db/queries/stages");
 const { listTranscriptsForCall } = require("../../db/queries/transcripts");
 const { listSummariesForCall } = require("../../db/queries/summaries");
 const { listMetadataForCall } = require("../../db/queries/metadata");
-
-function parseUrl(req) {
-  return new URL(req.url, `http://${req.headers.host}`);
-}
+const { parseListFilters } = require("./filters");
 
 function sendJson(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -34,13 +31,18 @@ async function readJsonBody(req) {
 }
 
 async function listCallsHandler(req, res, { db }) {
-  const url = parseUrl(req);
-  const status = url.searchParams.get("status") || undefined;
-  const q = url.searchParams.get("q") || undefined;
-  const limit = Number(url.searchParams.get("limit") || 50);
-  const offset = Number(url.searchParams.get("offset") || 0);
-
-  const result = listCalls(db, { status, q, limit, offset });
+  const filters = parseListFilters(req);
+  const result = listCalls(db, {
+    status: filters.status,
+    q: filters.q,
+    limit: filters.limit,
+    offset: filters.offset,
+    start: filters.start,
+    end: filters.end,
+    incidentType: filters.incidentType,
+    jurisdiction: filters.jurisdiction,
+    minConfidence: filters.minConfidence
+  });
   sendJson(res, 200, result);
 }
 

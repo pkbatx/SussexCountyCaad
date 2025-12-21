@@ -23,15 +23,58 @@ function addIncidentMember(db, { incidentId, callId, linkReason, linkConfidence 
   ).run(incidentId, callId, linkReason, linkConfidence ?? 0, createdAt);
 }
 
-function listIncidents(db, { limit = 50, offset = 0 } = {}) {
+function listIncidents(
+  db,
+  {
+    limit = 50,
+    offset = 0,
+    start,
+    end,
+    incidentType,
+    jurisdiction,
+    status,
+    minConfidence
+  } = {}
+) {
+  const clauses = [];
+  const params = [];
+  if (start) {
+    clauses.push("COALESCE(rollups.created_at, incident_groups.updated_at) >= ?");
+    params.push(start);
+  }
+  if (end) {
+    clauses.push("COALESCE(rollups.created_at, incident_groups.updated_at) <= ?");
+    params.push(end);
+  }
+  if (incidentType) {
+    clauses.push("json_extract(rollups.key_fields_json, '$.incident_type') = ?");
+    params.push(incidentType);
+  }
+  if (jurisdiction) {
+    clauses.push("json_extract(rollups.key_fields_json, '$.jurisdiction') = ?");
+    params.push(jurisdiction);
+  }
+  if (status && status !== "any") {
+    clauses.push("json_extract(rollups.key_fields_json, '$.status') = ?");
+    params.push(status);
+  }
+  if (typeof minConfidence === "number") {
+    clauses.push("COALESCE(incident_groups.group_confidence, 0) >= ?");
+    params.push(minConfidence);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const items = db
     .prepare(
-      "SELECT incident_groups.*, rollups.summary_text as latest_summary, rollups.created_at as last_rollup_at, rollups.version as latest_rollup_version, COUNT(incident_group_members.call_id) as member_count FROM incident_groups LEFT JOIN incident_group_members ON incident_groups.incident_id = incident_group_members.incident_id LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) GROUP BY incident_groups.incident_id ORDER BY COALESCE(rollups.created_at, incident_groups.updated_at) DESC LIMIT ? OFFSET ?"
+      "SELECT incident_groups.*, rollups.summary_text as latest_summary, rollups.created_at as last_rollup_at, rollups.version as latest_rollup_version, json_extract(rollups.key_fields_json, '$.incident_type') as incident_type, json_extract(rollups.key_fields_json, '$.jurisdiction') as jurisdiction, json_extract(rollups.key_fields_json, '$.status') as status, COUNT(incident_group_members.call_id) as member_count FROM incident_groups LEFT JOIN incident_group_members ON incident_groups.incident_id = incident_group_members.incident_id LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) " +
+        `${where} GROUP BY incident_groups.incident_id ORDER BY COALESCE(rollups.created_at, incident_groups.updated_at) DESC LIMIT ? OFFSET ?`
     )
-    .all(limit, offset);
+    .all(...params, limit, offset);
   const total = db
-    .prepare("SELECT COUNT(1) as count FROM incident_groups")
-    .get().count;
+    .prepare(
+      "SELECT COUNT(1) as count FROM incident_groups LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) " +
+        where
+    )
+    .get(...params).count;
   return { items, total };
 }
 

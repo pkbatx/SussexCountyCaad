@@ -44,7 +44,7 @@ async function requestJsonCompletion({ config, systemPrompt, userPrompt }) {
   };
 }
 
-async function transcribe({ config, filePath }) {
+async function transcribe({ config, filePath, prompt, language }) {
   if (!config.openaiApiKey) {
     throw new Error("OPENAI_API_KEY is required for transcription");
   }
@@ -53,7 +53,14 @@ async function transcribe({ config, filePath }) {
   const blob = new Blob([buffer]);
   const form = new FormData();
   form.append("file", blob, path.basename(filePath));
-  form.append("model", "whisper-1");
+  const model = config.openaiTranscriptionModel || "gpt-4o-transcribe";
+  form.append("model", model);
+  if (prompt) {
+    form.append("prompt", prompt);
+  }
+  if (language) {
+    form.append("language", language);
+  }
 
   const startedAt = Date.now();
   const response = await fetch(OPENAI_TRANSCRIBE_URL, {
@@ -73,7 +80,7 @@ async function transcribe({ config, filePath }) {
 
   return {
     text: json.text,
-    model: "whisper-1",
+    model,
     usage: json.usage ?? null,
     latencyMs
   };

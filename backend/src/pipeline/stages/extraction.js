@@ -12,6 +12,8 @@ const { createMetadataExtract } = require("../../db/queries/metadata");
 const { createAIInvocation } = require("../../db/queries/ai_invocations");
 const { findReferenceCandidatesForText } = require("../../db/queries/reference_data");
 const { listFeedbackSignals } = require("../../db/queries/feedback");
+const { getCallById } = require("../../db/queries/calls");
+const { extractFilenameHints } = require("../filename-hints");
 
 const schemaPath = path.join(__dirname, "../../ai/schema/metadata.json");
 const schemaText = fs.readFileSync(schemaPath, "utf8");
@@ -101,7 +103,13 @@ function applyFeedbackAdjustments(payload, penalty) {
   return adjusted;
 }
 
-function buildPrompt({ transcriptText, callId, extractedAt, referenceCandidates }) {
+function buildPrompt({
+  transcriptText,
+  callId,
+  extractedAt,
+  referenceCandidates,
+  filenameMetadata
+}) {
   return [
     "You output JSON only. No markdown. No extra keys.",
     "Schema version must be extraction.v2.",
@@ -109,19 +117,29 @@ function buildPrompt({ transcriptText, callId, extractedAt, referenceCandidates 
     "field_confidence must include a numeric 0-1 value for every field (use 0 for unknown).",
     "evidence must include an array for every field (empty array allowed for unknown).",
     "Every non-null field needs at least one evidence item with transcript spans.",
+    "Focus on address, cross streets, jurisdiction, agency, and incident type.",
     "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
+    "Do not treat ambiguous agency names as location unless the transcript explicitly ties them to a town.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
     `extracted_at: ${extractedAt}`,
     `Schema: ${schemaText}`,
     "Evidence spans must use start_char/end_char indices into the transcript.",
-    "Filename metadata: none",
+    `Filename metadata: ${JSON.stringify(filenameMetadata || {})}`,
     `Reference candidates: ${JSON.stringify(referenceCandidates || {})}`,
     `Transcript: ${transcriptText}`
   ].join("\n");
 }
 
-function buildRepairPrompt({ transcriptText, errors, raw, callId, extractedAt, referenceCandidates }) {
+function buildRepairPrompt({
+  transcriptText,
+  errors,
+  raw,
+  callId,
+  extractedAt,
+  referenceCandidates,
+  filenameMetadata
+}) {
   return [
     "The previous response failed schema validation.",
     `Errors: ${JSON.stringify(errors)}`,
@@ -131,13 +149,15 @@ function buildRepairPrompt({ transcriptText, errors, raw, callId, extractedAt, r
     "field_confidence must include a numeric 0-1 value for every field (use 0 for unknown).",
     "evidence must include an array for every field (empty array allowed for unknown).",
     "Every non-null field needs at least one evidence item with transcript spans.",
+    "Focus on address, cross streets, jurisdiction, agency, and incident type.",
     "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
+    "Do not treat ambiguous agency names as location unless the transcript explicitly ties them to a town.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
     `extracted_at: ${extractedAt}`,
     `Schema: ${schemaText}`,
     "Evidence spans must use start_char/end_char indices into the transcript.",
-    "Filename metadata: none",
+    `Filename metadata: ${JSON.stringify(filenameMetadata || {})}`,
     `Reference candidates: ${JSON.stringify(referenceCandidates || {})}`,
     `Transcript: ${transcriptText}`,
     `Previous response: ${raw}`
@@ -201,6 +221,33 @@ function validateReferenceCandidates(payload, referenceCandidates) {
   return { ok: errors.length === 0, errors };
 }
 
+function mergeReferenceCandidates(primary, secondary, limitPerType) {
+  const merged = {};
+  const types = new Set([
+    ...Object.keys(primary || {}),
+    ...Object.keys(secondary || {})
+  ]);
+
+  types.forEach((type) => {
+    const items = [];
+    const seen = new Set();
+    [primary?.[type] || [], secondary?.[type] || []].forEach((list) => {
+      list.forEach((item) => {
+        if (!item || seen.has(item.reference_id)) {
+          return;
+        }
+        seen.add(item.reference_id);
+        if (!limitPerType || items.length < limitPerType) {
+          items.push(item);
+        }
+      });
+    });
+    merged[type] = items;
+  });
+
+  return merged;
+}
+
 function recordFailure({ db, callId, prompt, result, status, errors, setRecorded }) {
   if (setRecorded) {
     setRecorded();
@@ -227,17 +274,34 @@ async function runStage({ config, db, callId, runId, pipeline }) {
     throw new Error("No transcript available for metadata extraction");
   }
 
+  const call = getCallById(db, callId);
   const transcriptText = transcripts[0].text;
-  const referenceCandidates = findReferenceCandidatesForText(db, {
+  const transcriptCandidates = findReferenceCandidatesForText(db, {
     text: transcriptText,
     limitPerType: config.referenceDataMaxCandidates
   });
+  const filenameHints = extractFilenameHints({
+    db,
+    sourcePath: call?.source_path || null,
+    config
+  });
+  const referenceCandidates = mergeReferenceCandidates(
+    transcriptCandidates,
+    filenameHints.referenceCandidates,
+    config.referenceDataMaxCandidates
+  );
   const extractedAt = new Date().toISOString();
   const prompt = buildPrompt({
     transcriptText,
     callId,
     extractedAt,
-    referenceCandidates
+    referenceCandidates,
+    filenameMetadata: {
+      raw: filenameHints.raw,
+      town_candidates: filenameHints.townCandidates,
+      agency_tokens: filenameHints.agencyTokens,
+      ambiguous_agencies: filenameHints.ambiguousAgencies
+    }
   });
   const adapter = createAIAdapter({ config });
   const maxAttempts = 3;
@@ -255,7 +319,13 @@ async function runStage({ config, db, callId, runId, pipeline }) {
             raw: lastRaw,
             callId,
             extractedAt,
-            referenceCandidates
+            referenceCandidates,
+            filenameMetadata: {
+              raw: filenameHints.raw,
+              town_candidates: filenameHints.townCandidates,
+              agency_tokens: filenameHints.agencyTokens,
+              ambiguous_agencies: filenameHints.ambiguousAgencies
+            }
           });
 
     const result = await adapter.extractMetadata({ prompt: currentPrompt });

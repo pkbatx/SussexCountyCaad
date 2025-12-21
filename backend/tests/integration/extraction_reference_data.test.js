@@ -36,6 +36,7 @@ test("extraction prompt includes reference candidates", () => {
   });
 
   assert.match(prompt, /Reference candidates:/);
+  assert.match(prompt, /Filename metadata:/);
   assert.ok(prompt.includes("Market Street"));
   assert.ok(prompt.includes("Georgetown"));
   assert.ok(prompt.includes("Sussex Hospital"));

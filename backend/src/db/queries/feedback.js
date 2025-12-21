@@ -37,5 +37,8 @@ function listFeedbackSignals(db, { incidentId, callId, signalType, since } = {})
 
 module.exports = {
   createFeedbackSignal,
-  listFeedbackSignals
+  listFeedbackSignals,
+  listFeedbackForCall: (db, callId) => listFeedbackSignals(db, { callId }),
+  listFeedbackForIncident: (db, incidentId) =>
+    listFeedbackSignals(db, { incidentId })
 };

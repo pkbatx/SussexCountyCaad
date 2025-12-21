@@ -1,0 +1,524 @@
+openapi: 3.0.3
+info:
+  title: SussexCountyCAAD Ops UI API
+  version: 0.1.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/calls:
+    get:
+      summary: List calls
+      parameters:
+        - $ref: "#/components/parameters/start"
+        - $ref: "#/components/parameters/end"
+        - $ref: "#/components/parameters/incidentType"
+        - $ref: "#/components/parameters/jurisdiction"
+        - $ref: "#/components/parameters/status"
+        - $ref: "#/components/parameters/minConfidence"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+        - $ref: "#/components/parameters/q"
+      responses:
+        "200":
+          description: Call list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallListResponse"
+
+  /api/calls/{callId}:
+    get:
+      summary: Get call detail
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Call detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallDetailResponse"
+        "404":
+          description: Call not found
+
+  /api/calls/{callId}/retry:
+    post:
+      summary: Retry a pipeline stage for a call
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stage]
+              properties:
+                stage:
+                  type: string
+      responses:
+        "200":
+          description: Stage enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StageStatus"
+
+  /api/incidents:
+    get:
+      summary: List incidents
+      parameters:
+        - $ref: "#/components/parameters/start"
+        - $ref: "#/components/parameters/end"
+        - $ref: "#/components/parameters/incidentType"
+        - $ref: "#/components/parameters/jurisdiction"
+        - $ref: "#/components/parameters/status"
+        - $ref: "#/components/parameters/minConfidence"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: Incident list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentListResponse"
+
+  /api/incidents/{incidentId}:
+    get:
+      summary: Get incident detail
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Incident detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentDetailResponse"
+        "404":
+          description: Incident not found
+
+  /api/map/points:
+    get:
+      summary: Get map points for markers or heatmap
+      parameters:
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [markers, heatmap]
+          description: Rendering mode
+        - name: entity
+          in: query
+          schema:
+            type: string
+            enum: [call, incident, both]
+        - $ref: "#/components/parameters/start"
+        - $ref: "#/components/parameters/end"
+        - $ref: "#/components/parameters/minConfidence"
+        - name: min_lat
+          in: query
+          schema:
+            type: number
+        - name: min_lon
+          in: query
+          schema:
+            type: number
+        - name: max_lat
+          in: query
+          schema:
+            type: number
+        - name: max_lon
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Map points
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MapPointsResponse"
+
+  /api/summary:
+    get:
+      summary: Summary metrics
+      parameters:
+        - $ref: "#/components/parameters/start"
+        - $ref: "#/components/parameters/end"
+        - $ref: "#/components/parameters/incidentType"
+        - $ref: "#/components/parameters/jurisdiction"
+        - $ref: "#/components/parameters/status"
+        - $ref: "#/components/parameters/minConfidence"
+      responses:
+        "200":
+          description: Summary metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryMetrics"
+
+  /api/summary/trends:
+    get:
+      summary: Summary trend buckets
+      parameters:
+        - $ref: "#/components/parameters/start"
+        - $ref: "#/components/parameters/end"
+        - $ref: "#/components/parameters/incidentType"
+        - $ref: "#/components/parameters/jurisdiction"
+        - $ref: "#/components/parameters/status"
+        - $ref: "#/components/parameters/minConfidence"
+        - name: bucket_minutes
+          in: query
+          schema:
+            type: integer
+            default: 60
+      responses:
+        "200":
+          description: Trend buckets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrendBucket"
+
+  /api/summary/hotspots:
+    get:
+      summary: Summary hotspots
+      parameters:
+        - $ref: "#/components/parameters/start"
+        - $ref: "#/components/parameters/end"
+        - $ref: "#/components/parameters/incidentType"
+        - $ref: "#/components/parameters/jurisdiction"
+        - $ref: "#/components/parameters/status"
+        - $ref: "#/components/parameters/minConfidence"
+        - name: hotspot_type
+          in: query
+          schema:
+            type: string
+            enum: [any, town, street, poi]
+            default: any
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Hotspot aggregates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Hotspot"
+
+  /api/feedback/calls/{callId}:
+    get:
+      summary: List feedback signals for a call
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Feedback signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeedbackSignal"
+    post:
+      summary: Submit call feedback
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feedback_type]
+              properties:
+                feedback_type:
+                  type: string
+                message:
+                  type: string
+                correction:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "202":
+          description: Feedback accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackSignal"
+
+  /api/feedback/incidents/{incidentId}:
+    get:
+      summary: List feedback signals for an incident
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Feedback signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeedbackSignal"
+    post:
+      summary: Submit incident feedback
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feedback_type]
+              properties:
+                feedback_type:
+                  type: string
+                message:
+                  type: string
+                correction:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "202":
+          description: Feedback accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackSignal"
+
+components:
+  parameters:
+    start:
+      name: start
+      in: query
+      schema:
+        type: string
+        format: date-time
+    end:
+      name: end
+      in: query
+      schema:
+        type: string
+        format: date-time
+    incidentType:
+      name: incident_type
+      in: query
+      schema:
+        type: string
+    jurisdiction:
+      name: jurisdiction
+      in: query
+      schema:
+        type: string
+    status:
+      name: status
+      in: query
+      schema:
+        type: string
+    minConfidence:
+      name: min_confidence
+      in: query
+      schema:
+        type: number
+        minimum: 0
+        maximum: 1
+    limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+    offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+    q:
+      name: q
+      in: query
+      schema:
+        type: string
+
+  schemas:
+    CallSummary:
+      type: object
+      properties:
+        call_id: { type: string }
+        source_path: { type: string }
+        first_seen_at: { type: string, format: date-time }
+        status: { type: string }
+        incident_type: { type: string, nullable: true }
+        priority: { type: string, nullable: true }
+        jurisdiction: { type: string, nullable: true }
+        address_raw: { type: string, nullable: true }
+        address_normalized: { type: string, nullable: true }
+        grouping_confidence: { type: number, nullable: true }
+    CallListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallSummary"
+        total:
+          type: integer
+    StageStatus:
+      type: object
+      properties:
+        stage_name: { type: string }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        attempts: { type: integer }
+        error_message: { type: string, nullable: true }
+    CallDetailResponse:
+      type: object
+      properties:
+        call: { $ref: "#/components/schemas/CallSummary" }
+        stages: { type: array, items: { $ref: "#/components/schemas/StageStatus" } }
+        transcripts: { type: array, items: { type: object, additionalProperties: true } }
+        metadataExtracts: { type: array, items: { type: object, additionalProperties: true } }
+        summaries: { type: array, items: { type: object, additionalProperties: true } }
+        locations: { type: array, items: { type: object, additionalProperties: true } }
+        notifications: { type: array, items: { type: object, additionalProperties: true } }
+        incidents: { type: array, items: { type: object, additionalProperties: true } }
+
+    IncidentSummary:
+      type: object
+      properties:
+        incident_id: { type: string }
+        normalized_address: { type: string, nullable: true }
+        group_confidence: { type: number, nullable: true }
+        latest_summary: { type: string, nullable: true }
+        last_rollup_at: { type: string, format: date-time, nullable: true }
+        latest_rollup_version: { type: integer, nullable: true }
+        incident_type: { type: string, nullable: true }
+        jurisdiction: { type: string, nullable: true }
+        status: { type: string, nullable: true }
+        member_count: { type: integer }
+    IncidentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentSummary"
+        total:
+          type: integer
+    IncidentDetailResponse:
+      type: object
+      properties:
+        incident: { $ref: "#/components/schemas/IncidentSummary" }
+        members: { type: array, items: { type: object, additionalProperties: true } }
+        member_calls: { type: array, items: { $ref: "#/components/schemas/CallSummary" } }
+        grouping_decisions: { type: array, items: { type: object, additionalProperties: true } }
+        summaries: { type: array, items: { type: object, additionalProperties: true } }
+        rollups: { type: array, items: { type: object, additionalProperties: true } }
+        locations: { type: array, items: { type: object, additionalProperties: true } }
+        notifications: { type: array, items: { type: object, additionalProperties: true } }
+
+    MapPoint:
+      type: object
+      properties:
+        entity_type: { type: string, enum: [call, incident] }
+        entity_id: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        weight: { type: number }
+        updated_at: { type: string, format: date-time }
+        status: { type: string, nullable: true }
+    MapPointsResponse:
+      type: object
+      properties:
+        mode: { type: string }
+        points:
+          type: array
+          items: { $ref: "#/components/schemas/MapPoint" }
+        truncated: { type: boolean }
+
+    SummaryMetrics:
+      type: object
+      properties:
+        total_calls: { type: integer }
+        active_incidents: { type: integer }
+        high_priority_calls: { type: integer }
+        failed_stages: { type: integer }
+        notifications_sent: { type: integer }
+    TrendBucket:
+      type: object
+      properties:
+        bucket_start: { type: string, format: date-time }
+        bucket_end: { type: string, format: date-time }
+        call_count: { type: integer }
+    Hotspot:
+      type: object
+      properties:
+        hotspot_type: { type: string }
+        label: { type: string }
+        count: { type: integer }
+        latitude: { type: number, nullable: true }
+        longitude: { type: number, nullable: true }
+
+    FeedbackSignal:
+      type: object
+      properties:
+        feedback_id: { type: string }
+        target_type: { type: string }
+        target_id: { type: string }
+        feedback_type: { type: string }
+        submitted_at: { type: string, format: date-time }
+        apply_status: { type: string }

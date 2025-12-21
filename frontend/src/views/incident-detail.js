@@ -1,10 +1,17 @@
-import { getIncidentDetail } from "../api";
+import { getIncidentDetail, submitIncidentFeedback, listIncidentFeedback } from "../api";
 
-export async function renderIncidentDetailView({ incidentId, onBack }) {
+export async function renderIncidentDetailView({ incidentId, onBack, prefetched }) {
   const container = document.createElement("div");
   container.className = "incident-detail";
 
-  const data = await getIncidentDetail(incidentId);
+  let data;
+  try {
+    data = prefetched || (await getIncidentDetail(incidentId));
+  } catch (error) {
+    container.textContent = `Failed to load incident detail: ${error.message}`;
+    container.classList.add("empty-state");
+    return container;
+  }
 
   const back = document.createElement("button");
   back.className = "button";
@@ -13,9 +20,14 @@ export async function renderIncidentDetailView({ incidentId, onBack }) {
 
   const header = document.createElement("div");
   header.className = "detail-header";
+  const latestRollup = data.rollups?.[0];
+  const updatedAt = latestRollup?.created_at || data.incident.updated_at || "n/a";
+  const summary = latestRollup?.summary_text || "No rollup summary yet.";
   header.innerHTML = `
     <div class="detail-id">${data.incident.incident_id || data.incident.incidentId}</div>
     <div class="detail-path">${data.incident.normalized_address || "No address"}</div>
+    <div class="incident-updated">last update ${updatedAt}</div>
+    <div class="incident-summary">${summary}</div>
   `;
 
   const memberMeta = new Map(
@@ -46,10 +58,14 @@ export async function renderIncidentDetailView({ incidentId, onBack }) {
       const item = document.createElement("li");
       item.className = "grouping-item";
       const requiresReview = decision.requires_review ? "Needs review" : "OK";
+      const signalSummary = (decision.signals || [])
+        .map((signal) => `${signal.type} (${signal.weight})`)
+        .join(" · ");
       item.innerHTML = `
         <div class="grouping-title">${decision.call_id} • ${decision.decision}</div>
         <div class="grouping-meta">confidence ${decision.confidence} • ${requiresReview}</div>
         <div class="grouping-explanation">${decision.explanation || ""}</div>
+        <div class="grouping-meta">${signalSummary || "No signals recorded."}</div>
       `;
       decisionList.appendChild(item);
     });
@@ -117,12 +133,61 @@ export async function renderIncidentDetailView({ incidentId, onBack }) {
     locations.appendChild(document.createTextNode("No locations yet."));
   }
 
+  const feedback = document.createElement("div");
+  feedback.className = "detail-section";
+  feedback.innerHTML = "<h2>Feedback</h2>";
+  const feedbackList = document.createElement("ul");
+  feedbackList.className = "evidence-list";
+
+  const feedbackActions = [
+    { label: "Wrong location", type: "wrong_location" },
+    { label: "Wrong grouping", type: "wrong_grouping" },
+    { label: "Wrong type", type: "wrong_type" }
+  ];
+
+  const feedbackButtons = document.createElement("div");
+  feedbackButtons.className = "detail-section";
+  feedbackActions.forEach((action) => {
+    const button = document.createElement("button");
+    button.className = "button small";
+    button.textContent = action.label;
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      await submitIncidentFeedback(incidentId, { feedback_type: action.type });
+      const item = document.createElement("li");
+      item.className = "evidence-item";
+      item.textContent = `${action.label} submitted (queued)`;
+      feedbackList.prepend(item);
+      button.disabled = false;
+    });
+    feedbackButtons.appendChild(button);
+  });
+
+  try {
+    const existing = await listIncidentFeedback(incidentId);
+    existing.forEach((entry) => {
+      const item = document.createElement("li");
+      item.className = "evidence-item";
+      item.textContent = `${entry.feedback_type} • ${entry.apply_status}`;
+      feedbackList.appendChild(item);
+    });
+  } catch (_error) {
+    const item = document.createElement("li");
+    item.className = "evidence-item";
+    item.textContent = "Feedback history unavailable.";
+    feedbackList.appendChild(item);
+  }
+
+  feedback.appendChild(feedbackButtons);
+  feedback.appendChild(feedbackList);
+
   container.appendChild(back);
   container.appendChild(header);
   container.appendChild(members);
   container.appendChild(grouping);
   container.appendChild(rollups);
   container.appendChild(locations);
+  container.appendChild(feedback);
 
   return container;
 }

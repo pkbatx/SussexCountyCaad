@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Andover",
+    "zip_codes": ["07821"],
+    "latitude": 40.9857,
+    "longitude": -74.7437,
+    "bounding_box": {
+      "min_lat": 40.98,
+      "max_lat": 40.991,
+      "min_lon": -74.751,
+      "max_lon": -74.737
+    },
+    "pois": [
+      {
+        "name": "Andover Borough Hall",
+        "address": "137 Main St, Andover, NJ 07821",
+        "latitude": 40.9853,
+        "longitude": -74.7451
+      }
+    ]
+  }
+]

@@ -1,10 +1,17 @@
-import { getCallDetail, retryStage } from "../api";
+import { getCallDetail, retryStage, submitCallFeedback, listCallFeedback } from "../api";
 
-export async function renderCallDetailView({ callId, onBack }) {
+export async function renderCallDetailView({ callId, onBack, prefetched }) {
   const container = document.createElement("div");
   container.className = "call-detail";
 
-  const data = await getCallDetail(callId);
+  let data;
+  try {
+    data = prefetched || (await getCallDetail(callId));
+  } catch (error) {
+    container.textContent = `Failed to load call detail: ${error.message}`;
+    container.classList.add("empty-state");
+    return container;
+  }
 
   const back = document.createElement("button");
   back.className = "button";
@@ -44,7 +51,9 @@ export async function renderCallDetailView({ callId, onBack }) {
   transcripts.className = "detail-section";
   transcripts.innerHTML = "<h2>Transcript</h2>";
   const transcriptText = data.transcripts[0]?.text || "No transcript yet.";
-  transcripts.appendChild(document.createTextNode(transcriptText));
+  const transcriptBlock = document.createElement("pre");
+  transcriptBlock.textContent = transcriptText;
+  transcripts.appendChild(transcriptBlock);
 
   const summaries = document.createElement("div");
   summaries.className = "detail-section";
@@ -134,9 +143,20 @@ export async function renderCallDetailView({ callId, onBack }) {
     const review = document.createElement("div");
     review.className = grouping.payload.requires_review ? "review-flag" : "review-flag ok";
     review.textContent = grouping.payload.requires_review ? "requires review" : "no review";
+    const explanation = document.createElement("div");
+    explanation.className = "grouping-explanation";
+    explanation.textContent = grouping.payload.explanation || "No explanation provided.";
+    const signals = document.createElement("div");
+    signals.className = "grouping-meta";
+    const signalList = (grouping.payload.signals || [])
+      .map((signal) => `${signal.type} (${signal.weight})`)
+      .join(" · ");
+    signals.textContent = signalList || "No signals recorded.";
     groupingBlock.appendChild(decision);
     groupingBlock.appendChild(confidenceText);
     groupingBlock.appendChild(review);
+    groupingBlock.appendChild(explanation);
+    groupingBlock.appendChild(signals);
   } else {
     groupingBlock.appendChild(document.createTextNode("No grouping decision yet."));
   }
@@ -144,11 +164,61 @@ export async function renderCallDetailView({ callId, onBack }) {
   metadata.appendChild(extractionBlock);
   metadata.appendChild(groupingBlock);
 
+  const feedback = document.createElement("div");
+  feedback.className = "detail-section";
+  feedback.innerHTML = "<h2>Feedback</h2>";
+  const feedbackList = document.createElement("ul");
+  feedbackList.className = "evidence-list";
+
+  const feedbackActions = [
+    { label: "Bad transcript", type: "bad_transcript" },
+    { label: "Wrong location", type: "wrong_location" },
+    { label: "Wrong grouping", type: "wrong_grouping" },
+    { label: "Wrong type", type: "wrong_type" }
+  ];
+
+  const feedbackButtons = document.createElement("div");
+  feedbackButtons.className = "detail-section";
+  feedbackActions.forEach((action) => {
+    const button = document.createElement("button");
+    button.className = "button small";
+    button.textContent = action.label;
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      await submitCallFeedback(callId, { feedback_type: action.type });
+      const item = document.createElement("li");
+      item.className = "evidence-item";
+      item.textContent = `${action.label} submitted (queued)`;
+      feedbackList.prepend(item);
+      button.disabled = false;
+    });
+    feedbackButtons.appendChild(button);
+  });
+
+  try {
+    const existing = await listCallFeedback(callId);
+    existing.forEach((entry) => {
+      const item = document.createElement("li");
+      item.className = "evidence-item";
+      item.textContent = `${entry.feedback_type} • ${entry.apply_status}`;
+      feedbackList.appendChild(item);
+    });
+  } catch (_error) {
+    const item = document.createElement("li");
+    item.className = "evidence-item";
+    item.textContent = "Feedback history unavailable.";
+    feedbackList.appendChild(item);
+  }
+
+  feedback.appendChild(feedbackButtons);
+  feedback.appendChild(feedbackList);
+
   container.appendChild(back);
   container.appendChild(header);
   container.appendChild(stages);
   container.appendChild(transcripts);
   container.appendChild(metadata);
+  container.appendChild(feedback);
   container.appendChild(summaries);
 
   return container;
