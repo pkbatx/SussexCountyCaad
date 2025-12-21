@@ -1,0 +1,87 @@
+{
+  "schema_version": "extraction.v2",
+  "call_id": "call-fixture-09",
+  "extracted_at": "2025-12-20T00:00:00.000Z",
+  "confidence_overall": 0.7,
+  "incident_type": "disturbance",
+  "priority": null,
+  "jurisdiction": null,
+  "channel": "channel 5",
+  "talkgroup": "talkgroup 17",
+  "units": [],
+  "incident_id": null,
+  "address_raw": "9 River Rd",
+  "address_normalized": "9 River Rd",
+  "cross_street_1": null,
+  "cross_street_2": null,
+  "landmark": null,
+  "city": null,
+  "notes": null,
+  "field_confidence": {
+    "incident_type": 0.8,
+    "priority": 0.1,
+    "jurisdiction": 0.1,
+    "channel": 0.8,
+    "talkgroup": 0.8,
+    "units": 0.1,
+    "incident_id": 0.1,
+    "address_raw": 0.8,
+    "address_normalized": 0.75,
+    "cross_street_1": 0.1,
+    "cross_street_2": 0.1,
+    "landmark": 0.1,
+    "city": 0.1,
+    "notes": 0.1
+  },
+  "evidence": {
+    "incident_type": [
+      {
+        "text": "disturbance",
+        "start_char": 45,
+        "end_char": 56,
+        "reason": "explicitly stated"
+      }
+    ],
+    "priority": [],
+    "jurisdiction": [],
+    "channel": [
+      {
+        "text": "channel 5",
+        "start_char": 12,
+        "end_char": 21,
+        "reason": "explicitly stated"
+      }
+    ],
+    "talkgroup": [
+      {
+        "text": "talkgroup 17",
+        "start_char": 23,
+        "end_char": 35,
+        "reason": "explicitly stated"
+      }
+    ],
+    "units": [],
+    "incident_id": [],
+    "address_raw": [
+      {
+        "text": "9 River Rd",
+        "start_char": 60,
+        "end_char": 70,
+        "reason": "explicitly stated"
+      }
+    ],
+    "address_normalized": [
+      {
+        "text": "9 River Rd",
+        "start_char": 60,
+        "end_char": 70,
+        "reason": "normalized from transcript"
+      }
+    ],
+    "cross_street_1": [],
+    "cross_street_2": [],
+    "landmark": [],
+    "city": [],
+    "notes": []
+  }
+}

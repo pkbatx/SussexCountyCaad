@@ -1,0 +1,82 @@
+{
+  "schema_version": "extraction.v2",
+  "call_id": "call-fixture-07",
+  "extracted_at": "2025-12-20T00:00:00.000Z",
+  "confidence_overall": 0.7,
+  "incident_type": null,
+  "priority": null,
+  "jurisdiction": null,
+  "channel": null,
+  "talkgroup": null,
+  "units": [
+    "A1",
+    "B2"
+  ],
+  "incident_id": null,
+  "address_raw": "10 Market Street",
+  "address_normalized": "10 Market Street",
+  "cross_street_1": null,
+  "cross_street_2": null,
+  "landmark": null,
+  "city": null,
+  "notes": null,
+  "field_confidence": {
+    "incident_type": 0.1,
+    "priority": 0.1,
+    "jurisdiction": 0.1,
+    "channel": 0.1,
+    "talkgroup": 0.1,
+    "units": 0.9,
+    "incident_id": 0.1,
+    "address_raw": 0.85,
+    "address_normalized": 0.8,
+    "cross_street_1": 0.1,
+    "cross_street_2": 0.1,
+    "landmark": 0.1,
+    "city": 0.1,
+    "notes": 0.1
+  },
+  "evidence": {
+    "incident_type": [],
+    "priority": [],
+    "jurisdiction": [],
+    "channel": [],
+    "talkgroup": [],
+    "units": [
+      {
+        "text": "A1",
+        "start_char": 6,
+        "end_char": 8,
+        "reason": "explicitly stated"
+      },
+      {
+        "text": "B2",
+        "start_char": 13,
+        "end_char": 15,
+        "reason": "explicitly stated"
+      }
+    ],
+    "incident_id": [],
+    "address_raw": [
+      {
+        "text": "10 Market Street",
+        "start_char": 29,
+        "end_char": 45,
+        "reason": "explicitly stated"
+      }
+    ],
+    "address_normalized": [
+      {
+        "text": "10 Market Street",
+        "start_char": 29,
+        "end_char": 45,
+        "reason": "normalized from transcript"
+      }
+    ],
+    "cross_street_1": [],
+    "cross_street_2": [],
+    "landmark": [],
+    "city": [],
+    "notes": []
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "schema_version": "extraction.v2",
+  "call_id": "call-fixture-04",
+  "extracted_at": "2025-12-20T00:00:00.000Z",
+  "confidence_overall": 0.7,
+  "incident_type": "assault report",
+  "priority": null,
+  "jurisdiction": null,
+  "channel": null,
+  "talkgroup": null,
+  "units": [],
+  "incident_id": null,
+  "address_raw": "mall parking lot",
+  "address_normalized": "mall parking lot",
+  "cross_street_1": null,
+  "cross_street_2": null,
+  "landmark": "mall parking lot",
+  "city": null,
+  "notes": null,
+  "field_confidence": {
+    "incident_type": 0.85,
+    "priority": 0.1,
+    "jurisdiction": 0.1,
+    "channel": 0.1,
+    "talkgroup": 0.1,
+    "units": 0.1,
+    "incident_id": 0.1,
+    "address_raw": 0.75,
+    "address_normalized": 0.7,
+    "cross_street_1": 0.1,
+    "cross_street_2": 0.1,
+    "landmark": 0.8,
+    "city": 0.1,
+    "notes": 0.1
+  },
+  "evidence": {
+    "incident_type": [
+      {
+        "text": "assault report",
+        "start_char": 39,
+        "end_char": 53,
+        "reason": "explicitly stated"
+      }
+    ],
+    "priority": [],
+    "jurisdiction": [],
+    "channel": [],
+    "talkgroup": [],
+    "units": [],
+    "incident_id": [],
+    "address_raw": [
+      {
+        "text": "mall parking lot",
+        "start_char": 15,
+        "end_char": 31,
+        "reason": "explicitly stated"
+      }
+    ],
+    "address_normalized": [
+      {
+        "text": "mall parking lot",
+        "start_char": 15,
+        "end_char": 31,
+        "reason": "normalized from transcript"
+      }
+    ],
+    "cross_street_1": [],
+    "cross_street_2": [],
+    "landmark": [
+      {
+        "text": "mall parking lot",
+        "start_char": 15,
+        "end_char": 31,
+        "reason": "explicitly stated"
+      }
+    ],
+    "city": [],
+    "notes": []
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "grouping.v2",
+  "call_id": "call-fixture-01",
+  "grouped_at": "2025-12-20T00:00:00.000Z",
+  "decision": "join_incident",
+  "incident_id": "incident-001",
+  "matched_existing_incident_id": "incident-001",
+  "confidence": 0.85,
+  "signals": [
+    {
+      "type": "incident_id_match",
+      "value": "24-1234",
+      "weight": 0.9,
+      "evidence": [
+        {
+          "text": "Incident 24-1234",
+          "start_char": 0,
+          "end_char": 16,
+          "reason": "explicitly stated"
+        }
+      ]
+    }
+  ],
+  "explanation": "Incident ID explicitly matched.",
+  "requires_review": false
+}

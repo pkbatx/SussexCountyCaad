@@ -1,0 +1,9 @@
+{
+  "candidates": [
+    {
+      "incident_id": "incident-001",
+      "normalized_address": "50 Lake Road",
+      "member_count": 2
+    }
+  ]
+}

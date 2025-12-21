@@ -8,7 +8,9 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
+**Tests/Validation**: Validation tasks are REQUIRED when changes touch
+ingestion, schema/migrations, grouping logic, or notifications. Other tests are
+optional unless explicitly requested in the feature specification.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -242,6 +244,9 @@ With multiple developers:
 
 ## Notes
 
+- Include explicit validation tasks when touching ingestion, schema/migrations,
+  grouping logic, or notifications.
+- Include migration and audit-trail tasks when schema changes are required.
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
 - Each user story should be independently completable and testable

@@ -1,0 +1,96 @@
+{
+  "schema_version": "extraction.v2",
+  "call_id": "call-fixture-03",
+  "extracted_at": "2025-12-20T00:00:00.000Z",
+  "confidence_overall": 0.7,
+  "incident_type": "structure fire",
+  "priority": null,
+  "jurisdiction": null,
+  "channel": null,
+  "talkgroup": null,
+  "units": [
+    "Engine 3"
+  ],
+  "incident_id": null,
+  "address_raw": "Oak St and Pine Ave",
+  "address_normalized": "Oak St and Pine Ave",
+  "cross_street_1": "Oak St",
+  "cross_street_2": "Pine Ave",
+  "landmark": null,
+  "city": null,
+  "notes": null,
+  "field_confidence": {
+    "incident_type": 0.9,
+    "priority": 0.1,
+    "jurisdiction": 0.1,
+    "channel": 0.1,
+    "talkgroup": 0.1,
+    "units": 0.9,
+    "incident_id": 0.1,
+    "address_raw": 0.85,
+    "address_normalized": 0.8,
+    "cross_street_1": 0.85,
+    "cross_street_2": 0.85,
+    "landmark": 0.1,
+    "city": 0.1,
+    "notes": 0.1
+  },
+  "evidence": {
+    "incident_type": [
+      {
+        "text": "structure fire",
+        "start_char": 42,
+        "end_char": 56,
+        "reason": "explicitly stated"
+      }
+    ],
+    "priority": [],
+    "jurisdiction": [],
+    "channel": [],
+    "talkgroup": [],
+    "units": [
+      {
+        "text": "Engine 3",
+        "start_char": 0,
+        "end_char": 8,
+        "reason": "explicitly stated"
+      }
+    ],
+    "incident_id": [],
+    "address_raw": [
+      {
+        "text": "Oak St and Pine Ave",
+        "start_char": 12,
+        "end_char": 31,
+        "reason": "explicitly stated"
+      }
+    ],
+    "address_normalized": [
+      {
+        "text": "Oak St and Pine Ave",
+        "start_char": 12,
+        "end_char": 31,
+        "reason": "normalized from transcript"
+      }
+    ],
+    "cross_street_1": [
+      {
+        "text": "Oak St",
+        "start_char": 12,
+        "end_char": 18,
+        "reason": "explicitly stated"
+      }
+    ],
+    "cross_street_2": [
+      {
+        "text": "Pine Ave",
+        "start_char": 23,
+        "end_char": 31,
+        "reason": "explicitly stated"
+      }
+    ],
+    "landmark": [],
+    "city": [],
+    "notes": []
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "sussexcountycaad",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev"
+  }
+}

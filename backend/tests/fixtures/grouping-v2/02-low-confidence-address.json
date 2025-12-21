@@ -1,0 +1,26 @@
+{
+  "schema_version": "grouping.v2",
+  "call_id": "call-fixture-02",
+  "grouped_at": "2025-12-20T00:00:00.000Z",
+  "decision": "new_incident",
+  "incident_id": "incident-002",
+  "matched_existing_incident_id": null,
+  "confidence": 0.6,
+  "signals": [
+    {
+      "type": "address_match",
+      "value": "Maple and 5th",
+      "weight": 0.4,
+      "evidence": [
+        {
+          "text": "Maple and 5th",
+          "start_char": 26,
+          "end_char": 39,
+          "reason": "address overlap"
+        }
+      ]
+    }
+  ],
+  "explanation": "Address overlap but confidence below threshold.",
+  "requires_review": true
+}

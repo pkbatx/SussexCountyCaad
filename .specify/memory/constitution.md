@@ -1,50 +1,105 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+- Version change: unversioned template -> 1.0.0
+- Modified principles:
+  - Principle 1 placeholder -> Local-First Durability & Idempotent Pipeline
+  - Principle 2 placeholder -> Immutable Inputs & Deterministic Call Identity
+  - Principle 3 placeholder -> Provider-Abstraction with OpenAI Default
+  - Principle 4 placeholder -> Strict Machine-Validated AI Output
+  - Principle 5 placeholder -> Conservative Grouping & Incremental Summaries
+- Added sections: None (template sections filled)
+- Removed sections: None
+- Templates requiring updates:
+  - OK .specify/templates/plan-template.md
+  - OK .specify/templates/spec-template.md
+  - OK .specify/templates/tasks-template.md
+  - PENDING .specify/templates/commands/*.md (directory missing)
+- Follow-up TODOs:
+  - TODO(RATIFICATION_DATE): confirm original ratification date
+-->
+# SussexCountyCAAD Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### Local-First Durability & Idempotent Pipeline
+- All calls, tasks, artifacts, incident groups, summaries, locations, and
+  notification logs MUST persist locally and survive restarts.
+- The pipeline MUST be staged, idempotent, and safe to retry with deterministic
+  results keyed by call identity.
+- Failures MUST be recorded with actionable state and never hidden or silently
+  skipped.
+- Schema changes MUST use explicit migrations and record an audit trail of what
+  produced each artifact and when.
+Rationale: Local-first reliability requires durable state and safe retries.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### Immutable Inputs & Deterministic Call Identity
+- The calls directory MUST be read-only input; no pipeline step may mutate it.
+- Each audio file MUST map deterministically to a stable call identity derived
+  from its content hash.
+- Duplicate processing MUST be prevented; reprocessing is explicit and must
+  remain idempotent.
+Rationale: Deterministic identity prevents silent reprocessing and data drift.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### Provider-Abstraction with OpenAI Default
+- AI calls MUST go through a clean internal provider interface; watcher,
+  pipeline, database, and UI MUST NOT depend on provider-specific details.
+- The MVP MUST use OpenAI endpoints out of the box and MUST run end-to-end
+  without a local model runner.
+- Provider swapping MUST NOT require changes outside the AI integration layer.
+Rationale: The system stays testable now and extensible later.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### Strict Machine-Validated AI Output
+- Metadata extraction and incident grouping outputs MUST be strict JSON matching
+  defined schemas with no markdown or extra text.
+- Responses MUST be machine-validated; invalid JSON is rejected and retried with
+  a repair attempt.
+- Each extracted field MUST include a confidence score and, when possible,
+  evidence references back to transcript text.
+- Transcripts are noisy; the system MUST preserve uncertainty and ambiguity
+  rather than forcing a single answer.
+- Location and geocoding are best-effort and MUST NOT fail the call when unclear.
+Rationale: Reliable automation requires strict validation and explicit
+uncertainty handling.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### Conservative Grouping & Incremental Summaries
+- Incident grouping MUST be conservative and explainable: group by normalized
+  address when available, otherwise by incident ID or strong matching signals.
+- Low-confidence matches MUST NOT be merged; keep separate groups when uncertain.
+- The system MUST maintain per-call history and artifacts while updating an
+  incremental rollup summary for each incident group.
+Rationale: Trustworthy grouping depends on cautious, explainable linkage.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## System Constraints & Configuration
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- The system MUST run end-to-end locally; AI calls are the only external
+  dependency for MVP behavior.
+- Configuration MUST live outside code (env/config files); secrets are never
+  committed.
+- Default configuration MUST enable OpenAI testing with minimal setup.
+- The UI MUST make processing state, failures, and retry paths obvious.
+- Local operation MUST be straightforward and documented.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Workflow & Quality Gates
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+- If requirements are ambiguous, stop and ask rather than guessing.
+- No opportunistic refactors, unrelated formatting changes, or scope expansion;
+  every change MUST trace to a stated requirement and concrete task.
+- Changes affecting ingestion, schema/migrations, grouping logic, or
+  notification delivery MUST include explicit validation.
+- AI schema or prompt changes MUST update validation and repair-retry handling.
+- Operational changes MUST preserve failure visibility and retry clarity.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- This constitution supersedes other project documentation; resolve conflicts by
+  updating docs or amending this constitution.
+- Amendments require a documented proposal, an updated Sync Impact Report,
+  semver version bump, and updates to dependent templates and guidance, with
+  approval from the project owner.
+- Versioning policy: MAJOR for incompatible governance or principle
+  removals/redefinitions; MINOR for new principles/sections or material
+  expansions; PATCH for clarifications or typo fixes.
+- Compliance review is required for every change; deviations need explicit
+  justification and approval.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: TODO(RATIFICATION_DATE): confirm original ratification date | **Last Amended**: 2025-12-20

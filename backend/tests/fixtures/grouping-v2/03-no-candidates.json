@@ -1,0 +1,18 @@
+{
+  "schema_version": "grouping.v2",
+  "call_id": "call-fixture-03",
+  "grouped_at": "2025-12-20T00:00:00.000Z",
+  "decision": "new_incident",
+  "incident_id": "incident-003",
+  "matched_existing_incident_id": null,
+  "confidence": 0.7,
+  "signals": [
+    {
+      "type": "time_proximity",
+      "value": "no_candidates",
+      "weight": 0.2
+    }
+  ],
+  "explanation": "No candidates available; new incident created.",
+  "requires_review": false
+}

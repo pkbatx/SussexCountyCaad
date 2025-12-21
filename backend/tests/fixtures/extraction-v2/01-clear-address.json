@@ -1,0 +1,82 @@
+{
+  "schema_version": "extraction.v2",
+  "call_id": "call-fixture-01",
+  "extracted_at": "2025-12-20T00:00:00.000Z",
+  "confidence_overall": 0.7,
+  "incident_type": "medical alarm",
+  "priority": null,
+  "jurisdiction": null,
+  "channel": null,
+  "talkgroup": null,
+  "units": [
+    "Unit 12"
+  ],
+  "incident_id": null,
+  "address_raw": "123 Main Street",
+  "address_normalized": "123 Main Street",
+  "cross_street_1": null,
+  "cross_street_2": null,
+  "landmark": null,
+  "city": null,
+  "notes": null,
+  "field_confidence": {
+    "incident_type": 0.9,
+    "priority": 0.1,
+    "jurisdiction": 0.1,
+    "channel": 0.1,
+    "talkgroup": 0.1,
+    "units": 0.9,
+    "incident_id": 0.1,
+    "address_raw": 0.9,
+    "address_normalized": 0.85,
+    "cross_street_1": 0.1,
+    "cross_street_2": 0.1,
+    "landmark": 0.1,
+    "city": 0.1,
+    "notes": 0.1
+  },
+  "evidence": {
+    "incident_type": [
+      {
+        "text": "medical alarm",
+        "start_char": 44,
+        "end_char": 57,
+        "reason": "explicitly stated"
+      }
+    ],
+    "priority": [],
+    "jurisdiction": [],
+    "channel": [],
+    "talkgroup": [],
+    "units": [
+      {
+        "text": "Unit 12",
+        "start_char": 0,
+        "end_char": 7,
+        "reason": "explicitly stated"
+      }
+    ],
+    "incident_id": [],
+    "address_raw": [
+      {
+        "text": "123 Main Street",
+        "start_char": 22,
+        "end_char": 37,
+        "reason": "explicitly stated"
+      }
+    ],
+    "address_normalized": [
+      {
+        "text": "123 Main Street",
+        "start_char": 22,
+        "end_char": 37,
+        "reason": "normalized from transcript"
+      }
+    ],
+    "cross_street_1": [],
+    "cross_street_2": [],
+    "landmark": [],
+    "city": [],
+    "notes": []
+  }
+}

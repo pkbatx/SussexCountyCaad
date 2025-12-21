@@ -1,0 +1,87 @@
+{
+  "schema_version": "extraction.v2",
+  "call_id": "call-fixture-02",
+  "extracted_at": "2025-12-20T00:00:00.000Z",
+  "confidence_overall": 0.7,
+  "incident_type": "smoke",
+  "priority": null,
+  "jurisdiction": null,
+  "channel": null,
+  "talkgroup": null,
+  "units": [],
+  "incident_id": null,
+  "address_raw": "Maple and 5th",
+  "address_normalized": "Maple and 5th",
+  "cross_street_1": "Maple",
+  "cross_street_2": "5th",
+  "landmark": null,
+  "city": null,
+  "notes": null,
+  "field_confidence": {
+    "incident_type": 0.85,
+    "priority": 0.1,
+    "jurisdiction": 0.1,
+    "channel": 0.1,
+    "talkgroup": 0.1,
+    "units": 0.1,
+    "incident_id": 0.1,
+    "address_raw": 0.8,
+    "address_normalized": 0.75,
+    "cross_street_1": 0.8,
+    "cross_street_2": 0.8,
+    "landmark": 0.1,
+    "city": 0.1,
+    "notes": 0.1
+  },
+  "evidence": {
+    "incident_type": [
+      {
+        "text": "smoke",
+        "start_char": 15,
+        "end_char": 20,
+        "reason": "explicitly stated"
+      }
+    ],
+    "priority": [],
+    "jurisdiction": [],
+    "channel": [],
+    "talkgroup": [],
+    "units": [],
+    "incident_id": [],
+    "address_raw": [
+      {
+        "text": "Maple and 5th",
+        "start_char": 26,
+        "end_char": 39,
+        "reason": "explicitly stated"
+      }
+    ],
+    "address_normalized": [
+      {
+        "text": "Maple and 5th",
+        "start_char": 26,
+        "end_char": 39,
+        "reason": "normalized from transcript"
+      }
+    ],
+    "cross_street_1": [
+      {
+        "text": "Maple",
+        "start_char": 26,
+        "end_char": 31,
+        "reason": "explicitly stated"
+      }
+    ],
+    "cross_street_2": [
+      {
+        "text": "5th",
+        "start_char": 36,
+        "end_char": 39,
+        "reason": "explicitly stated"
+      }
+    ],
+    "landmark": [],
+    "city": [],
+    "notes": []
+  }
+}

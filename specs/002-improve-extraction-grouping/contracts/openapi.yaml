@@ -1,0 +1,438 @@
+openapi: 3.0.3
+info:
+  title: SussexCountyCAAD API (Extraction & Grouping v2)
+  version: 0.2.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+  /api/calls:
+    get:
+      summary: List calls
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: q
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Call list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Call"
+                  total:
+                    type: integer
+  /api/calls/{callId}:
+    get:
+      summary: Call detail
+      parameters:
+        - in: path
+          name: callId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Call detail payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  call:
+                    $ref: "#/components/schemas/Call"
+                  stages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Stage"
+                  transcripts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Transcript"
+                  metadataExtracts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MetadataExtract"
+                  summaries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RollupArtifact"
+                  locations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Location"
+                  notifications:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notification"
+                  incidents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Incident"
+  /api/incidents:
+    get:
+      summary: List incidents
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Incident list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Incident"
+                  total:
+                    type: integer
+  /api/incidents/{incidentId}:
+    get:
+      summary: Incident detail
+      parameters:
+        - in: path
+          name: incidentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Incident detail payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incident:
+                    $ref: "#/components/schemas/Incident"
+                  members:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/IncidentMember"
+                  summaries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RollupArtifact"
+                  locations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Location"
+                  notifications:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notification"
+components:
+  schemas:
+    Call:
+      type: object
+      properties:
+        call_id:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        file_path:
+          type: string
+    Stage:
+      type: object
+      properties:
+        stage_name:
+          type: string
+        status:
+          type: string
+        attempts:
+          type: integer
+        last_error:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+    Transcript:
+      type: object
+      properties:
+        transcript_id:
+          type: string
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    MetadataExtract:
+      type: object
+      properties:
+        extract_id:
+          type: string
+        schema_version:
+          type: string
+        payload:
+          oneOf:
+            - $ref: "#/components/schemas/ExtractionArtifactV2"
+            - $ref: "#/components/schemas/GroupingDecisionV2"
+        created_at:
+          type: string
+          format: date-time
+    ExtractionArtifactV2:
+      type: object
+      required:
+        - schema_version
+        - call_id
+        - extracted_at
+        - confidence_overall
+        - field_confidence
+        - evidence
+      properties:
+        schema_version:
+          type: string
+          enum: ["extraction.v2"]
+        call_id:
+          type: string
+        extracted_at:
+          type: string
+          format: date-time
+        confidence_overall:
+          type: number
+        incident_type:
+          type: string
+          nullable: true
+        priority:
+          type: string
+          nullable: true
+        jurisdiction:
+          type: string
+          nullable: true
+        channel:
+          type: string
+          nullable: true
+        talkgroup:
+          type: string
+          nullable: true
+        units:
+          type: array
+          items:
+            type: string
+        incident_id:
+          type: string
+          nullable: true
+        address_raw:
+          type: string
+          nullable: true
+        address_normalized:
+          type: string
+          nullable: true
+        cross_street_1:
+          type: string
+          nullable: true
+        cross_street_2:
+          type: string
+          nullable: true
+        landmark:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        field_confidence:
+          type: object
+          additionalProperties:
+            type: number
+        evidence:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/EvidenceItem"
+    GroupingDecisionV2:
+      type: object
+      required:
+        - schema_version
+        - call_id
+        - grouped_at
+        - decision
+        - incident_id
+        - confidence
+        - signals
+        - explanation
+        - requires_review
+      properties:
+        schema_version:
+          type: string
+          enum: ["grouping.v2"]
+        call_id:
+          type: string
+        grouped_at:
+          type: string
+          format: date-time
+        decision:
+          type: string
+          enum: ["new_incident", "join_incident", "no_grouping"]
+        incident_id:
+          type: string
+        matched_existing_incident_id:
+          type: string
+          nullable: true
+        confidence:
+          type: number
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Signal"
+        explanation:
+          type: string
+        requires_review:
+          type: boolean
+    EvidenceItem:
+      type: object
+      required:
+        - text
+        - reason
+      properties:
+        text:
+          type: string
+        start_char:
+          type: integer
+          nullable: true
+        end_char:
+          type: integer
+          nullable: true
+        segment_id:
+          type: string
+          nullable: true
+        t_start:
+          type: number
+          nullable: true
+        t_end:
+          type: number
+          nullable: true
+        reason:
+          type: string
+    Signal:
+      type: object
+      required:
+        - type
+        - value
+        - weight
+      properties:
+        type:
+          type: string
+          enum:
+            - incident_id_match
+            - address_match
+            - cross_street_match
+            - unit_overlap
+            - time_proximity
+            - jurisdiction_match
+            - channel_match
+            - text_similarity
+        value:
+          oneOf:
+            - type: string
+            - type: object
+        weight:
+          type: number
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+    RollupArtifact:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        summary:
+          type: string
+        latest_update:
+          type: array
+          items:
+            type: string
+        key_fields:
+          type: object
+        confidence:
+          type: number
+        open_questions:
+          type: array
+          items:
+            type: string
+        included_call_ids:
+          type: array
+          items:
+            type: string
+    Incident:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+    IncidentMember:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        call_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    Location:
+      type: object
+      properties:
+        subject_type:
+          type: string
+        subject_id:
+          type: string
+        location_text:
+          type: string
+    Notification:
+      type: object
+      properties:
+        notification_id:
+          type: string
+        channel:
+          type: string
+        sent_at:
+          type: string
+          format: date-time

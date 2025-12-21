@@ -75,6 +75,14 @@
 - What happens when [boundary condition]?
 - How does system handle [error scenario]?
 
+## Constitution Alignment *(mandatory)*
+
+- **Local-first durability + idempotency**: [Describe impact or confirm N/A]
+- **Deterministic call identity + read-only calls input**: [Describe impact or confirm N/A]
+- **AI output schema + validation**: [Schema reference, retry/repair plan, or N/A]
+- **Conservative grouping + incremental summaries**: [Rules/logic or N/A]
+- **Failure visibility + retry paths**: [UI/logging behavior or N/A]
+
 ## Requirements *(mandatory)*
 
 <!--

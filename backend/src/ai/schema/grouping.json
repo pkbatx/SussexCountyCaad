@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["grouping.v2"] },
+    "call_id": { "type": "string" },
+    "grouped_at": { "type": "string" },
+    "decision": {
+      "type": "string",
+      "enum": ["new_incident", "join_incident", "no_grouping"]
+    },
+    "incident_id": { "type": "string" },
+    "matched_existing_incident_id": { "type": ["string", "null"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "signals": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/signal" }
+    },
+    "explanation": { "type": "string" },
+    "requires_review": { "type": "boolean" }
+  },
+  "required": [
+    "schema_version",
+    "call_id",
+    "grouped_at",
+    "decision",
+    "incident_id",
+    "matched_existing_incident_id",
+    "confidence",
+    "signals",
+    "explanation",
+    "requires_review"
+  ],
+  "definitions": {
+    "evidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "start_char": { "type": ["integer", "null"], "minimum": 0 },
+        "end_char": { "type": ["integer", "null"], "minimum": 0 },
+        "segment_id": { "type": ["string", "null"] },
+        "t_start": { "type": ["number", "null"], "minimum": 0 },
+        "t_end": { "type": ["number", "null"], "minimum": 0 },
+        "reason": { "type": "string" }
+      },
+      "required": ["text", "reason"],
+      "anyOf": [
+        { "required": ["start_char", "end_char"] },
+        { "required": ["segment_id", "t_start", "t_end"] }
+      ]
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "incident_id_match",
+            "address_match",
+            "cross_street_match",
+            "unit_overlap",
+            "time_proximity",
+            "jurisdiction_match",
+            "channel_match",
+            "text_similarity"
+          ]
+        },
+        "value": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "object" }
+          ]
+        },
+        "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/evidenceItem" }
+        }
+      },
+      "required": ["type", "value", "weight"]
+    }
+  }
+}

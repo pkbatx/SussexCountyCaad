@@ -1,0 +1,87 @@
+{
+  "schema_version": "extraction.v2",
+  "call_id": "call-fixture-10",
+  "extracted_at": "2025-12-20T00:00:00.000Z",
+  "confidence_overall": 0.7,
+  "incident_type": "traffic accident",
+  "priority": null,
+  "jurisdiction": "City of Dover",
+  "channel": null,
+  "talkgroup": null,
+  "units": [],
+  "incident_id": null,
+  "address_raw": "6th Avenue",
+  "address_normalized": "6th Avenue",
+  "cross_street_1": null,
+  "cross_street_2": null,
+  "landmark": null,
+  "city": "Dover",
+  "notes": null,
+  "field_confidence": {
+    "incident_type": 0.85,
+    "priority": 0.1,
+    "jurisdiction": 0.85,
+    "channel": 0.1,
+    "talkgroup": 0.1,
+    "units": 0.1,
+    "incident_id": 0.1,
+    "address_raw": 0.8,
+    "address_normalized": 0.75,
+    "cross_street_1": 0.1,
+    "cross_street_2": 0.1,
+    "landmark": 0.1,
+    "city": 0.8,
+    "notes": 0.1
+  },
+  "evidence": {
+    "incident_type": [
+      {
+        "text": "traffic accident",
+        "start_char": 24,
+        "end_char": 40,
+        "reason": "explicitly stated"
+      }
+    ],
+    "priority": [],
+    "jurisdiction": [
+      {
+        "text": "City of Dover",
+        "start_char": 0,
+        "end_char": 13,
+        "reason": "explicitly stated"
+      }
+    ],
+    "channel": [],
+    "talkgroup": [],
+    "units": [],
+    "incident_id": [],
+    "address_raw": [
+      {
+        "text": "6th Avenue",
+        "start_char": 44,
+        "end_char": 54,
+        "reason": "explicitly stated"
+      }
+    ],
+    "address_normalized": [
+      {
+        "text": "6th Avenue",
+        "start_char": 44,
+        "end_char": 54,
+        "reason": "normalized from transcript"
+      }
+    ],
+    "cross_street_1": [],
+    "cross_street_2": [],
+    "landmark": [],
+    "city": [
+      {
+        "text": "Dover",
+        "start_char": 8,
+        "end_char": 13,
+        "reason": "explicitly stated"
+      }
+    ],
+    "notes": []
+  }
+}

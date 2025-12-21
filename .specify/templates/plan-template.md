@@ -31,7 +31,18 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- Gate 1: Local-first durability and idempotent pipeline with explicit migrations
+  and audit trail for artifacts.
+- Gate 2: Read-only calls input with deterministic content-hash call identity and
+  no silent reprocessing.
+- Gate 3: AI provider abstraction with OpenAI default; no provider specifics
+  outside the AI layer and no local model runner required.
+- Gate 4: Strict JSON schema validation for AI outputs with reject + repair
+  retry, confidence scores, evidence references, and preserved uncertainty; geo
+  is best-effort.
+- Gate 5: Conservative, explainable incident grouping and incremental rollup
+  summaries while preserving per-call history.
+- Gate 6: Failure states and retry paths are visible and actionable.
 
 ## Project Structure
 

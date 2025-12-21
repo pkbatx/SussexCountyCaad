@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "enum": ["extraction.v2"] },
+    "call_id": { "type": "string" },
+    "extracted_at": { "type": "string" },
+    "confidence_overall": { "type": "number", "minimum": 0, "maximum": 1 },
+    "incident_type": { "type": ["string", "null"] },
+    "priority": { "type": ["string", "null"] },
+    "jurisdiction": { "type": ["string", "null"] },
+    "channel": { "type": ["string", "null"] },
+    "talkgroup": { "type": ["string", "null"] },
+    "units": { "type": "array", "items": { "type": "string" } },
+    "incident_id": { "type": ["string", "null"] },
+    "address_raw": { "type": ["string", "null"] },
+    "address_normalized": { "type": ["string", "null"] },
+    "cross_street_1": { "type": ["string", "null"] },
+    "cross_street_2": { "type": ["string", "null"] },
+    "landmark": { "type": ["string", "null"] },
+    "city": { "type": ["string", "null"] },
+    "notes": { "type": ["string", "null"] },
+    "field_confidence": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "$ref": "#/definitions/evidenceItem" }
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "call_id",
+    "extracted_at",
+    "confidence_overall",
+    "incident_type",
+    "priority",
+    "jurisdiction",
+    "channel",
+    "talkgroup",
+    "units",
+    "incident_id",
+    "address_raw",
+    "address_normalized",
+    "cross_street_1",
+    "cross_street_2",
+    "landmark",
+    "city",
+    "notes",
+    "field_confidence",
+    "evidence"
+  ],
+  "definitions": {
+    "evidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "start_char": { "type": ["integer", "null"], "minimum": 0 },
+        "end_char": { "type": ["integer", "null"], "minimum": 0 },
+        "segment_id": { "type": ["string", "null"] },
+        "t_start": { "type": ["number", "null"], "minimum": 0 },
+        "t_end": { "type": ["number", "null"], "minimum": 0 },
+        "reason": { "type": "string" }
+      },
+      "required": ["text", "reason"],
+      "anyOf": [
+        { "required": ["start_char", "end_char"] },
+        { "required": ["segment_id", "t_start", "t_end"] }
+      ]
+    }
+  }
+}

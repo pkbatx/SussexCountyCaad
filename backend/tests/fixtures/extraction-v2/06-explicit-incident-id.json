@@ -1,0 +1,82 @@
+{
+  "schema_version": "extraction.v2",
+  "call_id": "call-fixture-06",
+  "extracted_at": "2025-12-20T00:00:00.000Z",
+  "confidence_overall": 0.7,
+  "incident_type": null,
+  "priority": null,
+  "jurisdiction": null,
+  "channel": null,
+  "talkgroup": null,
+  "units": [
+    "unit 5"
+  ],
+  "incident_id": "24-1234",
+  "address_raw": "50 Lake Road",
+  "address_normalized": "50 Lake Road",
+  "cross_street_1": null,
+  "cross_street_2": null,
+  "landmark": null,
+  "city": null,
+  "notes": null,
+  "field_confidence": {
+    "incident_type": 0.1,
+    "priority": 0.1,
+    "jurisdiction": 0.1,
+    "channel": 0.1,
+    "talkgroup": 0.1,
+    "units": 0.85,
+    "incident_id": 0.9,
+    "address_raw": 0.85,
+    "address_normalized": 0.8,
+    "cross_street_1": 0.1,
+    "cross_street_2": 0.1,
+    "landmark": 0.1,
+    "city": 0.1,
+    "notes": 0.1
+  },
+  "evidence": {
+    "incident_type": [],
+    "priority": [],
+    "jurisdiction": [],
+    "channel": [],
+    "talkgroup": [],
+    "units": [
+      {
+        "text": "unit 5",
+        "start_char": 18,
+        "end_char": 24,
+        "reason": "explicitly stated"
+      }
+    ],
+    "incident_id": [
+      {
+        "text": "24-1234",
+        "start_char": 9,
+        "end_char": 16,
+        "reason": "explicitly stated"
+      }
+    ],
+    "address_raw": [
+      {
+        "text": "50 Lake Road",
+        "start_char": 37,
+        "end_char": 49,
+        "reason": "explicitly stated"
+      }
+    ],
+    "address_normalized": [
+      {
+        "text": "50 Lake Road",
+        "start_char": 37,
+        "end_char": 49,
+        "reason": "normalized from transcript"
+      }
+    ],
+    "cross_street_1": [],
+    "cross_street_2": [],
+    "landmark": [],
+    "city": [],
+    "notes": []
+  }
+}
