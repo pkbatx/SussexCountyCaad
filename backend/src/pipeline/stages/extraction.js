@@ -10,6 +10,8 @@ const { attemptRepair } = require("../../ai/repair");
 const { listTranscriptsForCall } = require("../../db/queries/transcripts");
 const { createMetadataExtract } = require("../../db/queries/metadata");
 const { createAIInvocation } = require("../../db/queries/ai_invocations");
+const { findReferenceCandidatesForText } = require("../../db/queries/reference_data");
+const { listFeedbackSignals } = require("../../db/queries/feedback");
 
 const schemaPath = path.join(__dirname, "../../ai/schema/metadata.json");
 const schemaText = fs.readFileSync(schemaPath, "utf8");
@@ -41,7 +43,65 @@ function summarizeConfidence(payload) {
   return total / scores.length;
 }
 
-function buildPrompt({ transcriptText, callId, extractedAt }) {
+function calculateFeedbackPenalty(signals, config) {
+  if (!Array.isArray(signals) || signals.length === 0) {
+    return 0;
+  }
+  const fallbackPenalty =
+    typeof config.feedbackConfidencePenalty === "number"
+      ? config.feedbackConfidencePenalty
+      : 0;
+  const fallbackMax =
+    typeof config.feedbackMaxPenalty === "number" ? config.feedbackMaxPenalty : 0;
+  let total = 0;
+
+  signals.forEach((signal) => {
+    const adjustment = signal.adjustment || {};
+    const penalty =
+      typeof adjustment.confidence_penalty === "number"
+        ? adjustment.confidence_penalty
+        : fallbackPenalty;
+    const maxPenalty =
+      typeof adjustment.max_penalty === "number"
+        ? adjustment.max_penalty
+        : fallbackMax;
+    const applied = maxPenalty > 0 ? Math.min(maxPenalty, penalty) : penalty;
+    if (typeof applied === "number" && applied > 0) {
+      total += applied;
+    }
+  });
+
+  if (fallbackMax > 0) {
+    total = Math.min(fallbackMax, total);
+  }
+  return total;
+}
+
+function applyFeedbackAdjustments(payload, penalty) {
+  if (!payload || !penalty || penalty <= 0) {
+    return payload;
+  }
+  const adjusted = { ...payload };
+  const baseline =
+    typeof payload.confidence_overall === "number"
+      ? payload.confidence_overall
+      : summarizeConfidence(payload);
+  if (typeof baseline === "number") {
+    adjusted.confidence_overall = Math.max(0, baseline - penalty);
+  }
+  if (payload.field_confidence && typeof payload.field_confidence === "object") {
+    adjusted.field_confidence = { ...payload.field_confidence };
+    Object.keys(adjusted.field_confidence).forEach((field) => {
+      const value = adjusted.field_confidence[field];
+      if (typeof value === "number") {
+        adjusted.field_confidence[field] = Math.max(0, value - penalty);
+      }
+    });
+  }
+  return adjusted;
+}
+
+function buildPrompt({ transcriptText, callId, extractedAt, referenceCandidates }) {
   return [
     "You output JSON only. No markdown. No extra keys.",
     "Schema version must be extraction.v2.",
@@ -49,17 +109,19 @@ function buildPrompt({ transcriptText, callId, extractedAt }) {
     "field_confidence must include a numeric 0-1 value for every field (use 0 for unknown).",
     "evidence must include an array for every field (empty array allowed for unknown).",
     "Every non-null field needs at least one evidence item with transcript spans.",
+    "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
     `extracted_at: ${extractedAt}`,
     `Schema: ${schemaText}`,
     "Evidence spans must use start_char/end_char indices into the transcript.",
     "Filename metadata: none",
+    `Reference candidates: ${JSON.stringify(referenceCandidates || {})}`,
     `Transcript: ${transcriptText}`
   ].join("\n");
 }
 
-function buildRepairPrompt({ transcriptText, errors, raw, callId, extractedAt }) {
+function buildRepairPrompt({ transcriptText, errors, raw, callId, extractedAt, referenceCandidates }) {
   return [
     "The previous response failed schema validation.",
     `Errors: ${JSON.stringify(errors)}`,
@@ -69,15 +131,74 @@ function buildRepairPrompt({ transcriptText, errors, raw, callId, extractedAt })
     "field_confidence must include a numeric 0-1 value for every field (use 0 for unknown).",
     "evidence must include an array for every field (empty array allowed for unknown).",
     "Every non-null field needs at least one evidence item with transcript spans.",
+    "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
     `extracted_at: ${extractedAt}`,
     `Schema: ${schemaText}`,
     "Evidence spans must use start_char/end_char indices into the transcript.",
     "Filename metadata: none",
+    `Reference candidates: ${JSON.stringify(referenceCandidates || {})}`,
     `Transcript: ${transcriptText}`,
     `Previous response: ${raw}`
   ].join("\n");
+}
+
+function normalizeCandidate(value) {
+  if (!value) {
+    return "";
+  }
+  return String(value).toLowerCase().trim();
+}
+
+function candidateMatches(value, candidates) {
+  if (!value || !Array.isArray(candidates) || !candidates.length) {
+    return true;
+  }
+  const normalized = normalizeCandidate(value);
+  return candidates.some((candidate) => {
+    const options = [candidate.canonical_name, ...(candidate.aliases || [])]
+      .map(normalizeCandidate)
+      .filter(Boolean);
+    return options.some(
+      (option) =>
+        normalized === option ||
+        normalized.includes(option) ||
+        option.includes(normalized)
+    );
+  });
+}
+
+function validateReferenceCandidates(payload, referenceCandidates) {
+  if (!referenceCandidates) {
+    return { ok: true, errors: [] };
+  }
+
+  const errors = [];
+  const streetCandidates = referenceCandidates.street || [];
+  const townCandidates = referenceCandidates.town || [];
+  const poiCandidates = referenceCandidates.poi || [];
+
+  const checks = [
+    { field: "address_normalized", candidates: streetCandidates },
+    { field: "cross_street_1", candidates: streetCandidates },
+    { field: "cross_street_2", candidates: streetCandidates },
+    { field: "landmark", candidates: poiCandidates },
+    { field: "city", candidates: townCandidates },
+    { field: "jurisdiction", candidates: townCandidates }
+  ];
+
+  checks.forEach(({ field, candidates }) => {
+    const value = payload[field];
+    if (value && !candidateMatches(value, candidates)) {
+      errors.push({
+        message: "Value not in reference candidates",
+        field
+      });
+    }
+  });
+
+  return { ok: errors.length === 0, errors };
 }
 
 function recordFailure({ db, callId, prompt, result, status, errors, setRecorded }) {
@@ -107,8 +228,17 @@ async function runStage({ config, db, callId, runId, pipeline }) {
   }
 
   const transcriptText = transcripts[0].text;
+  const referenceCandidates = findReferenceCandidatesForText(db, {
+    text: transcriptText,
+    limitPerType: config.referenceDataMaxCandidates
+  });
   const extractedAt = new Date().toISOString();
-  const prompt = buildPrompt({ transcriptText, callId, extractedAt });
+  const prompt = buildPrompt({
+    transcriptText,
+    callId,
+    extractedAt,
+    referenceCandidates
+  });
   const adapter = createAIAdapter({ config });
   const maxAttempts = 3;
   let payload = null;
@@ -117,14 +247,15 @@ async function runStage({ config, db, callId, runId, pipeline }) {
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const currentPrompt =
-      attempt === 0
+          attempt === 0
         ? prompt
         : buildRepairPrompt({
             transcriptText,
             errors: lastErrors,
             raw: lastRaw,
             callId,
-            extractedAt
+            extractedAt,
+            referenceCandidates
           });
 
     const result = await adapter.extractMetadata({ prompt: currentPrompt });
@@ -151,15 +282,20 @@ async function runStage({ config, db, callId, runId, pipeline }) {
 
     const validation = validatePayload(schemaPath, payload);
     const evidenceCheck = validateExtractionEvidence(payload);
+    const referenceCheck = validateReferenceCandidates(payload, referenceCandidates);
     lastErrors = [
       ...(validation.errors || []),
       ...(evidenceCheck.errors || []).map((error) => ({
         message: error.message,
         field: error.field
+      })),
+      ...(referenceCheck.errors || []).map((error) => ({
+        message: error.message,
+        field: error.field
       }))
     ];
 
-    if (!validation.ok || !evidenceCheck.ok) {
+    if (!validation.ok || !evidenceCheck.ok || !referenceCheck.ok) {
       recordFailure({
         db,
         callId,
@@ -170,6 +306,13 @@ async function runStage({ config, db, callId, runId, pipeline }) {
       });
       continue;
     }
+
+    const feedbackSignals = listFeedbackSignals(db, {
+      callId,
+      signalType: "contradiction"
+    });
+    const feedbackPenalty = calculateFeedbackPenalty(feedbackSignals, config);
+    payload = applyFeedbackAdjustments(payload, feedbackPenalty);
 
     createAIInvocation(db, {
       callId,
@@ -191,7 +334,8 @@ async function runStage({ config, db, callId, runId, pipeline }) {
 
   const finalValidation = validatePayload(schemaPath, payload);
   const finalEvidenceCheck = validateExtractionEvidence(payload);
-  if (!finalValidation.ok || !finalEvidenceCheck.ok) {
+  const finalReferenceCheck = validateReferenceCandidates(payload, referenceCandidates);
+  if (!finalValidation.ok || !finalEvidenceCheck.ok || !finalReferenceCheck.ok) {
     throw new Error("Metadata extraction schema validation failed");
   }
 
@@ -210,5 +354,6 @@ async function runStage({ config, db, callId, runId, pipeline }) {
 }
 
 module.exports = {
-  runStage
+  runStage,
+  buildPrompt
 };

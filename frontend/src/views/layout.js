@@ -6,8 +6,8 @@ export function renderLayout(target, { title, body }) {
   header.innerHTML = `
     <div class="brand">SussexCountyCAAD</div>
     <nav class="nav">
-      <a class="nav-item" href="#">Calls</a>
       <a class="nav-item" href="#incidents">Incidents</a>
+      <a class="nav-item" href="#calls">Calls</a>
       <a class="nav-item" href="#notifications">Notifications</a>
     </nav>
   `;

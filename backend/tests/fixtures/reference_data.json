@@ -1,0 +1,20 @@
+[
+  {
+    "reference_id": "ref-street-001",
+    "ref_type": "street",
+    "canonical_name": "Market Street",
+    "aliases": ["Market St", "Market St."]
+  },
+  {
+    "reference_id": "ref-town-001",
+    "ref_type": "town",
+    "canonical_name": "Georgetown",
+    "aliases": ["Gtwn"]
+  },
+  {
+    "reference_id": "ref-poi-001",
+    "ref_type": "poi",
+    "canonical_name": "Sussex Hospital",
+    "aliases": ["Hospital", "Sussex Memorial"]
+  }
+]

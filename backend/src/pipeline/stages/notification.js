@@ -1,12 +1,21 @@
 const { listMetadataForCall } = require("../../db/queries/metadata");
 const { listSummariesForCall } = require("../../db/queries/summaries");
-const { createNotification } = require("../../db/queries/notifications");
-const { selectRoutes } = require("../../notifications/rules");
+const { createNotification, findLatestNotificationForSubject } = require("../../db/queries/notifications");
+const { getLatestRollupForIncident } = require("../../db/queries/rollups");
+const { selectRoutes, buildIncidentDedupeKey, evaluateIncidentNotification } = require("../../notifications/rules");
 const { shouldSend } = require("../../notifications/dedupe");
 const { sendGroupMe } = require("../../notifications/groupme");
 const { sendDiscord } = require("../../notifications/discord");
 
-const DEDUPE_WINDOW_SECONDS = 300;
+const CALL_DEDUPE_WINDOW_SECONDS = 300;
+
+function getIncidentForCall(db, callId) {
+  return db
+    .prepare(
+      "SELECT incident_id FROM incident_group_members WHERE call_id = ? ORDER BY created_at DESC LIMIT 1"
+    )
+    .get(callId)?.incident_id;
+}
 
 async function runStage({ config, db, callId }) {
   const extracts = listMetadataForCall(db, callId);
@@ -16,15 +25,59 @@ async function runStage({ config, db, callId }) {
   const metadata = extraction || extracts[0];
   const metadataPayload = metadata ? JSON.parse(metadata.payload_json) : null;
   const summary = listSummariesForCall(db, callId)[0];
-  const summaryText = summary?.summary_text || "New call received.";
+  const callSummaryText = summary?.summary_text || "New call received.";
+  const incidentId = getIncidentForCall(db, callId);
 
   const routes = selectRoutes({ metadata: metadataPayload, config });
   for (const route of routes) {
-    const dedupeKey = `${route.channel}:${callId}`;
-    if (!shouldSend({ db, dedupeKey, windowSeconds: DEDUPE_WINDOW_SECONDS })) {
+    const subjectType = incidentId ? "incident" : "call";
+    const subjectId = incidentId || callId;
+    let dedupeKey = `${route.channel}:${subjectId}`;
+    let summaryText = callSummaryText;
+    let suppressionReason = null;
+
+    if (incidentId) {
+      const rollup = getLatestRollupForIncident(db, incidentId);
+      const lastNotification = findLatestNotificationForSubject(db, {
+        subjectType: "incident",
+        subjectId: incidentId,
+        channel: route.channel
+      });
+      const evaluation = evaluateIncidentNotification({
+        rollup,
+        lastNotification
+      });
+      if (!evaluation.send) {
+        suppressionReason = evaluation.reason;
+      }
+      if (rollup) {
+        summaryText = `Incident ${incidentId}: ${rollup.summary_text || "Update"}`;
+        dedupeKey = buildIncidentDedupeKey({ incidentId, rollup });
+      }
+    }
+
+    if (suppressionReason) {
       createNotification(db, {
-        subjectType: "call",
-        subjectId: callId,
+        subjectType,
+        subjectId,
+        channel: route.channel,
+        routingRule: route.rule,
+        dedupeKey,
+        status: "skipped",
+        sentAt: null,
+        errorDetail: suppressionReason
+      });
+      continue;
+    }
+
+    const windowSeconds = incidentId
+      ? config.notifyIncidentDedupeWindowSeconds
+      : CALL_DEDUPE_WINDOW_SECONDS;
+
+    if (!shouldSend({ db, dedupeKey, windowSeconds })) {
+      createNotification(db, {
+        subjectType,
+        subjectId,
         channel: route.channel,
         routingRule: route.rule,
         dedupeKey,
@@ -44,8 +97,8 @@ async function runStage({ config, db, callId }) {
       }
 
       createNotification(db, {
-        subjectType: "call",
-        subjectId: callId,
+        subjectType,
+        subjectId,
         channel: route.channel,
         routingRule: route.rule,
         dedupeKey,
@@ -54,8 +107,8 @@ async function runStage({ config, db, callId }) {
       });
     } catch (error) {
       createNotification(db, {
-        subjectType: "call",
-        subjectId: callId,
+        subjectType,
+        subjectId,
         channel: route.channel,
         routingRule: route.rule,
         dedupeKey,

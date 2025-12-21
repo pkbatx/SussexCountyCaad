@@ -44,18 +44,28 @@ async function render() {
     return;
   }
 
+  if (hash === "calls") {
+    const body = await renderCallsView({
+      onSelect: (callId) => {
+        window.location.hash = `call/${callId}`;
+      }
+    });
+    renderLayout(root, { title: "Call Feed", body });
+    return;
+  }
+
   if (hash === "notifications") {
     const body = await renderNotificationsView();
     renderLayout(root, { title: "Notifications", body });
     return;
   }
 
-  const body = await renderCallsView({
-    onSelect: (callId) => {
-      window.location.hash = `call/${callId}`;
+  const body = await renderIncidentsView({
+    onSelect: (incidentId) => {
+      window.location.hash = `incident/${incidentId}`;
     }
   });
-  renderLayout(root, { title: "Call Feed", body });
+  renderLayout(root, { title: "Incidents", body });
 }
 
 window.addEventListener("hashchange", render);

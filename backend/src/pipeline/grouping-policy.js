@@ -15,13 +15,16 @@ function hasStrongIncidentIdSignal(payload) {
   });
 }
 
-function normalizeDecision(payload, threshold) {
-  const confidence = payload.confidence;
+function normalizeDecision(payload, threshold, confidencePenalty) {
+  const adjustedConfidence =
+    typeof payload.confidence === "number"
+      ? Math.max(0, payload.confidence - (confidencePenalty || 0))
+      : null;
   const strongIncidentId = hasStrongIncidentIdSignal(payload);
-  if (typeof confidence !== "number") {
+  if (typeof adjustedConfidence !== "number") {
     return { decision: "new_incident", requiresReview: true, reason: "no_confidence" };
   }
-  if (confidence < threshold && !strongIncidentId) {
+  if (adjustedConfidence < threshold && !strongIncidentId) {
     return { decision: "new_incident", requiresReview: true, reason: "low_confidence" };
   }
   return {
@@ -31,8 +34,13 @@ function normalizeDecision(payload, threshold) {
   };
 }
 
-function selectIncident({ payload, existingIncidents, threshold = DEFAULT_THRESHOLD }) {
-  const normalized = normalizeDecision(payload, threshold);
+function selectIncident({
+  payload,
+  existingIncidents,
+  threshold = DEFAULT_THRESHOLD,
+  confidencePenalty = 0
+}) {
+  const normalized = normalizeDecision(payload, threshold, confidencePenalty);
 
   if (normalized.decision === "join_incident") {
     const matchId = payload.matched_existing_incident_id;

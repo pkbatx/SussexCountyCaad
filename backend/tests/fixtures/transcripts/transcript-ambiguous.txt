@@ -1,0 +1,1 @@
+Caller reports an alarm activation. No location is confirmed and units are standing by for more information.

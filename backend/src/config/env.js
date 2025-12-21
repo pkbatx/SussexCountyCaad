@@ -52,6 +52,16 @@ function loadConfig() {
     groupingConfidenceThreshold: Number(
       process.env.GROUPING_CONFIDENCE_THRESHOLD || 0.7
     ),
+    referenceDataMaxCandidates: Number(
+      process.env.REFERENCE_DATA_MAX_CANDIDATES || 10
+    ),
+    feedbackConfidencePenalty: Number(
+      process.env.FEEDBACK_CONFIDENCE_PENALTY || 0.05
+    ),
+    feedbackMaxPenalty: Number(process.env.FEEDBACK_MAX_PENALTY || 0.2),
+    notifyIncidentDedupeWindowSeconds: Number(
+      process.env.NOTIFY_INCIDENT_DEDUPE_WINDOW_SECONDS || 900
+    ),
     groupmeBotId: process.env.GROUPME_BOT_ID || null,
     discordWebhookUrl: process.env.DISCORD_WEBHOOK_URL || null
   };

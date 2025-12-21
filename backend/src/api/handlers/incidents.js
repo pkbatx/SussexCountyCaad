@@ -3,6 +3,8 @@ const {
   getIncidentById,
   listIncidentMembers
 } = require("../../db/queries/incidents");
+const { getCallById } = require("../../db/queries/calls");
+const { listGroupingDecisionsForIncident } = require("../../db/queries/grouping_decisions");
 const { listSummariesForIncident } = require("../../db/queries/summaries");
 const { listRollupsForIncident } = require("../../db/queries/rollups");
 const { listLocationsForSubject } = require("../../db/queries/locations");
@@ -31,6 +33,10 @@ async function incidentDetailHandler(req, res, { db, incidentId }) {
   }
 
   const members = listIncidentMembers(db, incidentId);
+  const memberCalls = members
+    .map((member) => getCallById(db, member.call_id))
+    .filter(Boolean);
+  const groupingDecisions = listGroupingDecisionsForIncident(db, incidentId);
   const summaries = listSummariesForIncident(db, incidentId);
   const rollups = listRollupsForIncident(db, incidentId);
   const locations = listLocationsForSubject(db, {
@@ -41,6 +47,8 @@ async function incidentDetailHandler(req, res, { db, incidentId }) {
   sendJson(res, 200, {
     incident,
     members,
+    member_calls: memberCalls,
+    grouping_decisions: groupingDecisions,
     summaries,
     rollups,
     locations,

@@ -7,7 +7,8 @@ const stageModuleMap = {
   grouping: "./grouping",
   geo: "./geo",
   notification: "./notification",
-  incidentSummary: "./incident-summary"
+  incidentSummary: "./incident-summary",
+  feedback: "./feedback"
 };
 
 function getStageHandler(stageName) {

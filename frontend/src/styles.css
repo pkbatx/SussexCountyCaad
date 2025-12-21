@@ -77,12 +77,34 @@ body {
   gap: 4px;
 }
 
+.call-status {
+  text-align: right;
+  font-size: 12px;
+  color: #374151;
+}
+
 .call-id {
   font-weight: 600;
   font-size: 13px;
 }
 
 .call-path {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.incident-summary {
+  font-size: 12px;
+  color: #374151;
+}
+
+.incident-updated {
+  font-weight: 600;
+  font-size: 12px;
+  color: #111827;
+}
+
+.incident-meta {
   font-size: 12px;
   color: #6b7280;
 }
@@ -212,4 +234,28 @@ body {
 .rollup-calls {
   font-size: 12px;
   color: #4b5563;
+}
+
+.grouping-item {
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: #f9fafb;
+}
+
+.grouping-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.grouping-meta {
+  font-size: 12px;
+  color: #4b5563;
+  margin-bottom: 4px;
+}
+
+.grouping-explanation {
+  font-size: 12px;
+  color: #374151;
 }

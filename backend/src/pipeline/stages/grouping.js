@@ -11,7 +11,9 @@ const {
   getIncidentById,
   listCandidateIncidents
 } = require("../../db/queries/incidents");
+const { createGroupingDecision } = require("../../db/queries/grouping_decisions");
 const { createAIInvocation } = require("../../db/queries/ai_invocations");
+const { listFeedbackSignals } = require("../../db/queries/feedback");
 const { selectIncident } = require("../grouping-policy");
 
 const schemaPath = path.join(__dirname, "../../ai/schema/grouping.json");
@@ -54,6 +56,7 @@ function buildPrompt({
   return [
     "You output JSON only. No markdown. No extra keys.",
     "Schema version must be grouping.v2.",
+    "incident_id must be a string; use an empty string if unknown.",
     `If confidence < ${threshold}, set requires_review true and prefer new_incident unless explicit incident_id evidence exists.`,
     "Signals must include weights and evidence when applicable.",
     `call_id: ${callId}`,
@@ -81,6 +84,7 @@ function buildRepairPrompt({
     `Errors: ${JSON.stringify(errors)}`,
     "Return JSON that matches the schema exactly with required fields.",
     "You output JSON only. No markdown. No extra keys.",
+    "incident_id must be a string; use an empty string if unknown.",
     `If confidence < ${threshold}, set requires_review true and prefer new_incident unless explicit incident_id evidence exists.`,
     "Signals must include weights and evidence when applicable.",
     `call_id: ${callId}`,
@@ -112,6 +116,19 @@ function recordFailure({ db, callId, prompt, result, status, errors, setRecorded
     latencyMs: result?.latencyMs ?? null,
     status
   });
+}
+
+function normalizeGroupingPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return payload;
+  }
+  if (payload.incident_id === null || payload.incident_id === undefined) {
+    payload.incident_id = "";
+  }
+  if (payload.matched_existing_incident_id === undefined) {
+    payload.matched_existing_incident_id = null;
+  }
+  return payload;
 }
 
 async function runStage({ config, db, callId, runId, pipeline }) {
@@ -202,6 +219,8 @@ async function runStage({ config, db, callId, runId, pipeline }) {
       payload = attemptRepair(result.content);
     }
 
+    payload = normalizeGroupingPayload(payload);
+
     if (!payload) {
       lastErrors = [{ message: "Invalid JSON" }];
       recordFailure({
@@ -260,13 +279,25 @@ async function runStage({ config, db, callId, runId, pipeline }) {
     confidenceSummary: payload.confidence
   });
 
-  const decision = selectIncident({
+  const feedbackSignals = payload.matched_existing_incident_id
+    ? listFeedbackSignals(db, {
+        incidentId: payload.matched_existing_incident_id,
+        signalType: "contradiction"
+      })
+    : [];
+  const feedbackPenalty = Math.min(
+    config.feedbackMaxPenalty,
+    config.feedbackConfidencePenalty * feedbackSignals.length
+  );
+
+  const selection = selectIncident({
     payload,
     existingIncidents: candidates,
-    threshold: config.groupingConfidenceThreshold
+    threshold: config.groupingConfidenceThreshold,
+    confidencePenalty: feedbackPenalty
   });
 
-  let incidentId = decision.incidentId;
+  let incidentId = selection.incidentId;
   if (!incidentId || !getIncidentById(db, incidentId)) {
     incidentId = createIncidentGroup(db, {
       normalizedAddress: extraction?.address_normalized || extraction?.address_raw || null,
@@ -282,8 +313,20 @@ async function runStage({ config, db, callId, runId, pipeline }) {
   addIncidentMember(db, {
     incidentId,
     callId,
-    linkReason: payload.explanation || decision.reason,
+    linkReason: payload.explanation || selection.reason,
     linkConfidence: payload.confidence
+  });
+
+  createGroupingDecision(db, {
+    callId,
+    incidentId,
+    runId,
+    decision: payload.decision,
+    matchedExistingIncidentId: payload.matched_existing_incident_id,
+    confidence: payload.confidence,
+    requiresReview: selection.requiresReview,
+    signals: payload.signals,
+    explanation: payload.explanation
   });
 
   if (pipeline?.enqueue) {

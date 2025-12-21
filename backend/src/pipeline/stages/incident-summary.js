@@ -1,4 +1,5 @@
 const { listIncidentMembers, getIncidentById } = require("../../db/queries/incidents");
+const { listGroupingDecisionsForIncident } = require("../../db/queries/grouping_decisions");
 const { createIncidentRollup } = require("../../db/queries/rollups");
 
 function getIncidentForCall(db, callId) {
@@ -17,7 +18,7 @@ function listCallSummariesForIncident(db, incidentId) {
     .all(incidentId);
 }
 
-async function runStage({ db, callId, runId }) {
+async function runStage({ db, callId, runId, pipeline }) {
   const incidentId = getIncidentForCall(db, callId);
   if (!incidentId) {
     return;
@@ -36,12 +37,24 @@ async function runStage({ db, callId, runId }) {
   const members = listIncidentMembers(db, incidentId);
   const includedCallIds = members.map((member) => member.call_id);
   const incident = getIncidentById(db, incidentId);
+  const decisions = listGroupingDecisionsForIncident(db, incidentId);
+  const latestDecision = decisions[0] || null;
   const keyFields = {
-    address: incident?.normalized_address || null
+    address: incident?.normalized_address || null,
+    grouping_decision: latestDecision
+      ? {
+          decision: latestDecision.decision,
+          confidence: latestDecision.confidence,
+          requires_review: latestDecision.requires_review
+        }
+      : null
   };
   const openQuestions = [];
   if (!incident?.normalized_address) {
     openQuestions.push("Location unclear");
+  }
+  if (latestDecision?.requires_review) {
+    openQuestions.push("Grouping decision needs review");
   }
 
   createIncidentRollup(db, {
@@ -54,6 +67,10 @@ async function runStage({ db, callId, runId }) {
     openQuestions,
     includedCallIds
   });
+
+  if (pipeline?.enqueue) {
+    pipeline.enqueue(callId, "feedback");
+  }
 }
 
 module.exports = {

@@ -45,8 +45,32 @@ function findRecentNotification(db, dedupeKey, windowStartIso) {
     .get(dedupeKey, windowStartIso);
 }
 
+function findLatestNotificationForSubject(db, { subjectType, subjectId, channel } = {}) {
+  const clauses = [];
+  const params = [];
+  if (subjectType) {
+    clauses.push("subject_type = ?");
+    params.push(subjectType);
+  }
+  if (subjectId) {
+    clauses.push("subject_id = ?");
+    params.push(subjectId);
+  }
+  if (channel) {
+    clauses.push("channel = ?");
+    params.push(channel);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  return db
+    .prepare(
+      `SELECT * FROM notifications ${where} ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(...params);
+}
+
 module.exports = {
   createNotification,
   listNotifications,
-  findRecentNotification
+  findRecentNotification,
+  findLatestNotificationForSubject
 };

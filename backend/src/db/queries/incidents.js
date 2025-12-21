@@ -26,7 +26,7 @@ function addIncidentMember(db, { incidentId, callId, linkReason, linkConfidence 
 function listIncidents(db, { limit = 50, offset = 0 } = {}) {
   const items = db
     .prepare(
-      "SELECT * FROM incident_groups ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+      "SELECT incident_groups.*, rollups.summary_text as latest_summary, rollups.created_at as last_rollup_at, rollups.version as latest_rollup_version, COUNT(incident_group_members.call_id) as member_count FROM incident_groups LEFT JOIN incident_group_members ON incident_groups.incident_id = incident_group_members.incident_id LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) GROUP BY incident_groups.incident_id ORDER BY COALESCE(rollups.created_at, incident_groups.updated_at) DESC LIMIT ? OFFSET ?"
     )
     .all(limit, offset);
   const total = db
