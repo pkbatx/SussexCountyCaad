@@ -20,9 +20,18 @@ export async function renderCallDetailView({ callId, onBack, prefetched }) {
 
   const header = document.createElement("div");
   header.className = "detail-header";
+  const operator = data.operator_fields || {};
+  const agencyLabel = operator.agency || "Unknown";
+  const typeLabel = operator.incident_type || "Unspecified";
+  const addressLabel = operator.address || "Location unknown";
+  const townLabel = operator.town || "";
+  const crossLabel = operator.cross_street || "";
+  const poiLabel = operator.poi || "";
   header.innerHTML = `
     <div class="detail-id">${data.call.call_id || data.call.callId}</div>
     <div class="detail-path">${data.call.source_path || data.call.sourcePath}</div>
+    <div class="incident-meta">${agencyLabel} · ${typeLabel}</div>
+    <div class="incident-meta">${[addressLabel, townLabel].filter(Boolean).join(" · ")}</div>
   `;
 
   const stages = document.createElement("div");
@@ -58,111 +67,29 @@ export async function renderCallDetailView({ callId, onBack, prefetched }) {
   const summaries = document.createElement("div");
   summaries.className = "detail-section";
   summaries.innerHTML = "<h2>Summary</h2>";
-  const summaryText = data.summaries[0]?.summary_text || "No summary yet.";
+  const summaryText = operator.summary || data.summaries[0]?.summary_text || "No summary yet.";
   summaries.appendChild(document.createTextNode(summaryText));
 
-  const metadata = document.createElement("div");
-  metadata.className = "detail-section";
-  metadata.innerHTML = "<h2>Metadata</h2>";
-  const extraction = data.metadataExtracts.find(
-    (item) => item.schema_version === "extraction.v2"
-  );
-  const grouping = data.metadataExtracts.find(
-    (item) => item.schema_version === "grouping.v2"
-  );
-
-  const extractionBlock = document.createElement("div");
-  extractionBlock.className = "metadata-block";
-  extractionBlock.innerHTML = "<h3>Extraction v2</h3>";
-
-  if (extraction?.payload) {
-    const list = document.createElement("ul");
-    list.className = "evidence-list";
-    const fields = [
-      "incident_type",
-      "priority",
-      "jurisdiction",
-      "channel",
-      "talkgroup",
-      "units",
-      "incident_id",
-      "address_raw",
-      "address_normalized",
-      "cross_street_1",
-      "cross_street_2",
-      "landmark",
-      "city",
-      "notes"
-    ];
-
-    fields.forEach((field) => {
-      const value = extraction.payload[field];
-      const confidence = extraction.payload.field_confidence?.[field];
-      const evidence = extraction.payload.evidence?.[field] || [];
-      const item = document.createElement("li");
-      item.className = "evidence-item";
-      const valueText = Array.isArray(value) ? value.join(", ") : value;
-
-      const label = document.createElement("div");
-      label.className = "evidence-field";
-      label.textContent = `${field}: ${valueText ?? "null"}`;
-      item.appendChild(label);
-
-      const meta = document.createElement("div");
-      meta.className = "evidence-meta";
-      meta.textContent = `confidence: ${confidence ?? "n/a"}`;
-      item.appendChild(meta);
-
-      if (evidence.length) {
-        const evidenceText = evidence
-          .map((entry) => entry.text)
-          .filter(Boolean)
-          .join(" | ");
-        const evidenceEl = document.createElement("div");
-        evidenceEl.className = "evidence-text";
-        evidenceEl.textContent = `evidence: ${evidenceText}`;
-        item.appendChild(evidenceEl);
-      }
-      list.appendChild(item);
-    });
-
-    extractionBlock.appendChild(list);
-  } else {
-    extractionBlock.appendChild(document.createTextNode("No extraction yet."));
-  }
-
-  const groupingBlock = document.createElement("div");
-  groupingBlock.className = "metadata-block";
-  groupingBlock.innerHTML = "<h3>Grouping v2</h3>";
-
-  if (grouping?.payload) {
-    const decision = document.createElement("div");
-    decision.textContent = `decision: ${grouping.payload.decision}`;
-    const confidenceText = document.createElement("div");
-    confidenceText.textContent = `confidence: ${grouping.payload.confidence}`;
-    const review = document.createElement("div");
-    review.className = grouping.payload.requires_review ? "review-flag" : "review-flag ok";
-    review.textContent = grouping.payload.requires_review ? "requires review" : "no review";
-    const explanation = document.createElement("div");
-    explanation.className = "grouping-explanation";
-    explanation.textContent = grouping.payload.explanation || "No explanation provided.";
-    const signals = document.createElement("div");
-    signals.className = "grouping-meta";
-    const signalList = (grouping.payload.signals || [])
-      .map((signal) => `${signal.type} (${signal.weight})`)
-      .join(" · ");
-    signals.textContent = signalList || "No signals recorded.";
-    groupingBlock.appendChild(decision);
-    groupingBlock.appendChild(confidenceText);
-    groupingBlock.appendChild(review);
-    groupingBlock.appendChild(explanation);
-    groupingBlock.appendChild(signals);
-  } else {
-    groupingBlock.appendChild(document.createTextNode("No grouping decision yet."));
-  }
-
-  metadata.appendChild(extractionBlock);
-  metadata.appendChild(groupingBlock);
+  const details = document.createElement("div");
+  details.className = "detail-section";
+  details.innerHTML = "<h2>Details</h2>";
+  const detailList = document.createElement("ul");
+  detailList.className = "evidence-list";
+  const detailRows = [
+    ["Agency", agencyLabel],
+    ["Incident type", typeLabel],
+    ["Address", addressLabel],
+    ["Town", townLabel || "Unknown"],
+    ["Cross street", crossLabel || "None"],
+    ["POI", poiLabel || "None"]
+  ];
+  detailRows.forEach(([label, value]) => {
+    const item = document.createElement("li");
+    item.className = "evidence-item";
+    item.textContent = `${label}: ${value}`;
+    detailList.appendChild(item);
+  });
+  details.appendChild(detailList);
 
   const feedback = document.createElement("div");
   feedback.className = "detail-section";
@@ -215,11 +142,11 @@ export async function renderCallDetailView({ callId, onBack, prefetched }) {
 
   container.appendChild(back);
   container.appendChild(header);
+  container.appendChild(details);
   container.appendChild(stages);
   container.appendChild(transcripts);
-  container.appendChild(metadata);
-  container.appendChild(feedback);
   container.appendChild(summaries);
+  container.appendChild(feedback);
 
   return container;
 }

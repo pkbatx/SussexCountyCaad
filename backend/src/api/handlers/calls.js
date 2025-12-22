@@ -41,6 +41,7 @@ async function listCallsHandler(req, res, { db }) {
     end: filters.end,
     incidentType: filters.incidentType,
     jurisdiction: filters.jurisdiction,
+    agency: filters.agency,
     minConfidence: filters.minConfidence
   });
   sendJson(res, 200, result);
@@ -55,17 +56,38 @@ async function callDetailHandler(req, res, { db, callId }) {
   const stages = getStagesForCall(db, callId);
   const transcripts = listTranscriptsForCall(db, callId);
   const summaries = listSummariesForCall(db, callId);
-  const metadataExtracts = listMetadataForCall(db, callId).map((item) => ({
-    ...item,
-    payload: JSON.parse(item.payload_json)
-  }));
+  const extracts = listMetadataForCall(db, callId)
+    .filter((item) => item.schema_version === "extraction.v2")
+    .sort((a, b) => (a.created_at > b.created_at ? -1 : 1));
+  let extracted = null;
+  try {
+    extracted = extracts.length ? JSON.parse(extracts[0].payload_json) : null;
+  } catch (_error) {
+    extracted = null;
+  }
+
+  const operatorFields = {
+    agency: call.agency_name || null,
+    incident_type: extracted?.incident_type ?? null,
+    address:
+      extracted?.address_normalized ??
+      extracted?.address_raw ??
+      null,
+    town: extracted?.city ?? extracted?.jurisdiction ?? null,
+    cross_street:
+      extracted?.cross_street_1 ??
+      extracted?.cross_street_2 ??
+      null,
+    poi: extracted?.landmark ?? null,
+    summary: summaries[0]?.summary_text ?? null
+  };
 
   sendJson(res, 200, {
     call,
     stages,
     transcripts,
-    metadataExtracts,
     summaries,
+    operator_fields: operatorFields,
     locations: [],
     notifications: [],
     incidents: []

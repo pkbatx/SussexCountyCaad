@@ -8,6 +8,7 @@
     "extracted_at": { "type": "string" },
     "confidence_overall": { "type": "number", "minimum": 0, "maximum": 1 },
     "incident_type": { "type": ["string", "null"] },
+    "agency": { "type": ["string", "null"] },
     "priority": { "type": ["string", "null"] },
     "jurisdiction": { "type": ["string", "null"] },
     "channel": { "type": ["string", "null"] },

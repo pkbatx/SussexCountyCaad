@@ -14,6 +14,7 @@ const { findReferenceCandidatesForText } = require("../../db/queries/reference_d
 const { listFeedbackSignals } = require("../../db/queries/feedback");
 const { getCallById } = require("../../db/queries/calls");
 const { extractFilenameHints } = require("../filename-hints");
+const { resolveAgency } = require("../agency-normalizer");
 
 const schemaPath = path.join(__dirname, "../../ai/schema/metadata.json");
 const schemaText = fs.readFileSync(schemaPath, "utf8");
@@ -117,7 +118,7 @@ function buildPrompt({
     "field_confidence must include a numeric 0-1 value for every field (use 0 for unknown).",
     "evidence must include an array for every field (empty array allowed for unknown).",
     "Every non-null field needs at least one evidence item with transcript spans.",
-    "Focus on address, cross streets, jurisdiction, agency, and incident type.",
+    "Focus on address, cross streets, jurisdiction, and incident type.",
     "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
     "Do not treat ambiguous agency names as location unless the transcript explicitly ties them to a town.",
     "If uncertain, set the field to null or empty and use low confidence.",
@@ -149,7 +150,7 @@ function buildRepairPrompt({
     "field_confidence must include a numeric 0-1 value for every field (use 0 for unknown).",
     "evidence must include an array for every field (empty array allowed for unknown).",
     "Every non-null field needs at least one evidence item with transcript spans.",
-    "Focus on address, cross streets, jurisdiction, agency, and incident type.",
+    "Focus on address, cross streets, jurisdiction, and incident type.",
     "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
     "Do not treat ambiguous agency names as location unless the transcript explicitly ties them to a town.",
     "If uncertain, set the field to null or empty and use low confidence.",
@@ -401,6 +402,15 @@ async function runStage({ config, db, callId, runId, pipeline }) {
   if (!payload) {
     throw new Error("Invalid JSON from metadata extraction");
   }
+
+  const agencyResult = resolveAgency({
+    db,
+    callId,
+    sourcePath: call?.source_path || null,
+    filenameHints,
+    config
+  });
+  payload.agency = agencyResult.agency;
 
   const finalValidation = validatePayload(schemaPath, payload);
   const finalEvidenceCheck = validateExtractionEvidence(payload);

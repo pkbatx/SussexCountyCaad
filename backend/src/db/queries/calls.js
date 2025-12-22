@@ -15,7 +15,8 @@ function listCalls(
     end,
     incidentType,
     jurisdiction,
-    minConfidence
+    minConfidence,
+    agency
   } = {}
 ) {
   const clauses = [];
@@ -44,6 +45,14 @@ function listCalls(
     clauses.push("json_extract(meta.payload_json, '$.jurisdiction') = ?");
     params.push(jurisdiction);
   }
+  if (agency) {
+    if (String(agency).toLowerCase() === "unknown") {
+      clauses.push("(calls.agency_name IS NULL OR calls.agency_name = '')");
+    } else {
+      clauses.push("calls.agency_name = ?");
+      params.push(agency);
+    }
+  }
   if (typeof minConfidence === "number") {
     clauses.push("COALESCE(gd.confidence, 0) >= ?");
     params.push(minConfidence);
@@ -51,7 +60,7 @@ function listCalls(
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const items = db
     .prepare(
-      `SELECT calls.*, json_extract(meta.payload_json, '$.incident_type') as incident_type, json_extract(meta.payload_json, '$.priority') as priority, json_extract(meta.payload_json, '$.jurisdiction') as jurisdiction, json_extract(meta.payload_json, '$.address_normalized') as address_normalized, json_extract(meta.payload_json, '$.address_raw') as address_raw, gd.confidence as grouping_confidence FROM calls LEFT JOIN metadata_extracts meta ON meta.call_id = calls.call_id AND meta.created_at = (SELECT MAX(created_at) FROM metadata_extracts WHERE call_id = calls.call_id) LEFT JOIN grouping_decisions gd ON gd.call_id = calls.call_id AND gd.created_at = (SELECT MAX(created_at) FROM grouping_decisions WHERE call_id = calls.call_id) ${where} ORDER BY calls.first_seen_at DESC LIMIT ? OFFSET ?`
+      `SELECT calls.*, calls.agency_name as agency, json_extract(meta.payload_json, '$.incident_type') as incident_type, COALESCE(json_extract(meta.payload_json, '$.city'), json_extract(meta.payload_json, '$.jurisdiction')) as town, json_extract(meta.payload_json, '$.address_normalized') as address, COALESCE(json_extract(meta.payload_json, '$.cross_street_1'), json_extract(meta.payload_json, '$.cross_street_2')) as cross_street, json_extract(meta.payload_json, '$.landmark') as poi, summary.summary_text as summary FROM calls LEFT JOIN metadata_extracts meta ON meta.call_id = calls.call_id AND meta.created_at = (SELECT MAX(created_at) FROM metadata_extracts WHERE call_id = calls.call_id) LEFT JOIN grouping_decisions gd ON gd.call_id = calls.call_id AND gd.created_at = (SELECT MAX(created_at) FROM grouping_decisions WHERE call_id = calls.call_id) LEFT JOIN summaries summary ON summary.subject_type = 'call' AND summary.subject_id = calls.call_id AND summary.version = (SELECT MAX(version) FROM summaries WHERE subject_id = calls.call_id AND subject_type = 'call') ${where} ORDER BY calls.first_seen_at DESC LIMIT ? OFFSET ?`
     )
     .all(...params, limit, offset);
   const total = db

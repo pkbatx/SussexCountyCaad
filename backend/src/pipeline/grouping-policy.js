@@ -1,4 +1,9 @@
 const DEFAULT_THRESHOLD = 0.7;
+const LOCATION_SIGNAL_TYPES = new Set([
+  "address_match",
+  "cross_street_match",
+  "jurisdiction_match"
+]);
 
 function hasStrongIncidentIdSignal(payload) {
   if (!Array.isArray(payload.signals)) {
@@ -21,11 +26,25 @@ function normalizeDecision(payload, threshold, confidencePenalty) {
       ? Math.max(0, payload.confidence - (confidencePenalty || 0))
       : null;
   const strongIncidentId = hasStrongIncidentIdSignal(payload);
+  const hasLocationSignal = Array.isArray(payload.signals)
+    ? payload.signals.some((signal) => LOCATION_SIGNAL_TYPES.has(signal.type))
+    : false;
   if (typeof adjustedConfidence !== "number") {
     return { decision: "new_incident", requiresReview: true, reason: "no_confidence" };
   }
   if (adjustedConfidence < threshold && !strongIncidentId) {
     return { decision: "new_incident", requiresReview: true, reason: "low_confidence" };
+  }
+  if (
+    payload.decision === "join_incident" &&
+    !hasLocationSignal &&
+    !strongIncidentId
+  ) {
+    return {
+      decision: "new_incident",
+      requiresReview: true,
+      reason: "missing_location_signal"
+    };
   }
   return {
     decision: payload.decision,

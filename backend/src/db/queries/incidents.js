@@ -33,7 +33,8 @@ function listIncidents(
     incidentType,
     jurisdiction,
     status,
-    minConfidence
+    minConfidence,
+    agency
   } = {}
 ) {
   const clauses = [];
@@ -54,6 +55,16 @@ function listIncidents(
     clauses.push("json_extract(rollups.key_fields_json, '$.jurisdiction') = ?");
     params.push(jurisdiction);
   }
+  if (agency) {
+    if (String(agency).toLowerCase() === "unknown") {
+      clauses.push(
+        "(json_extract(rollups.key_fields_json, '$.agency') IS NULL OR json_extract(rollups.key_fields_json, '$.agency') = '')"
+      );
+    } else {
+      clauses.push("json_extract(rollups.key_fields_json, '$.agency') = ?");
+      params.push(agency);
+    }
+  }
   if (status && status !== "any") {
     clauses.push("json_extract(rollups.key_fields_json, '$.status') = ?");
     params.push(status);
@@ -65,7 +76,7 @@ function listIncidents(
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const items = db
     .prepare(
-      "SELECT incident_groups.*, rollups.summary_text as latest_summary, rollups.created_at as last_rollup_at, rollups.version as latest_rollup_version, json_extract(rollups.key_fields_json, '$.incident_type') as incident_type, json_extract(rollups.key_fields_json, '$.jurisdiction') as jurisdiction, json_extract(rollups.key_fields_json, '$.status') as status, COUNT(incident_group_members.call_id) as member_count FROM incident_groups LEFT JOIN incident_group_members ON incident_groups.incident_id = incident_group_members.incident_id LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) " +
+      "SELECT incident_groups.*, rollups.summary_text as latest_summary, rollups.created_at as last_rollup_at, rollups.version as latest_rollup_version, json_extract(rollups.key_fields_json, '$.agency') as agency, json_extract(rollups.key_fields_json, '$.incident_type') as incident_type, json_extract(rollups.key_fields_json, '$.address') as address, json_extract(rollups.key_fields_json, '$.town') as town, json_extract(rollups.key_fields_json, '$.cross_street') as cross_street, json_extract(rollups.key_fields_json, '$.poi') as poi, json_extract(rollups.key_fields_json, '$.jurisdiction') as jurisdiction, json_extract(rollups.key_fields_json, '$.status') as status, COUNT(incident_group_members.call_id) as member_count FROM incident_groups LEFT JOIN incident_group_members ON incident_groups.incident_id = incident_group_members.incident_id LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) " +
         `${where} GROUP BY incident_groups.incident_id ORDER BY COALESCE(rollups.created_at, incident_groups.updated_at) DESC LIMIT ? OFFSET ?`
     )
     .all(...params, limit, offset);

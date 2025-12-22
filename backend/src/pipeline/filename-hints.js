@@ -14,7 +14,7 @@ function tokenizeFilename(sourcePath) {
   }
   const base = path.basename(sourcePath, path.extname(sourcePath));
   return base
-    .split(/[^a-zA-Z0-9]+/)
+    .split(/[^a-zA-Z0-9-]+/)
     .map((token) => token.trim())
     .filter((token) => token.length >= 2 && /[a-zA-Z]/.test(token));
 }

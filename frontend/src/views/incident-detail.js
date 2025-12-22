@@ -23,9 +23,14 @@ export async function renderIncidentDetailView({ incidentId, onBack, prefetched 
   const latestRollup = data.rollups?.[0];
   const updatedAt = latestRollup?.created_at || data.incident.updated_at || "n/a";
   const summary = latestRollup?.summary_text || "No rollup summary yet.";
+  const operator = data.operator_fields || {};
+  const agencyLabel = operator.agency || "Unknown";
+  const typeLabel = operator.incident_type || "Unspecified";
+  const addressLabel = operator.address || operator.town || "No address";
   header.innerHTML = `
     <div class="detail-id">${data.incident.incident_id || data.incident.incidentId}</div>
-    <div class="detail-path">${data.incident.normalized_address || "No address"}</div>
+    <div class="detail-path">${addressLabel}</div>
+    <div class="incident-meta">${agencyLabel} · ${typeLabel}</div>
     <div class="incident-updated">last update ${updatedAt}</div>
     <div class="incident-summary">${summary}</div>
   `;
@@ -49,31 +54,6 @@ export async function renderIncidentDetailView({ incidentId, onBack, prefetched 
   });
   members.appendChild(memberList);
 
-  const grouping = document.createElement("div");
-  grouping.className = "detail-section";
-  grouping.innerHTML = "<h2>Grouping Decisions</h2>";
-  if (data.grouping_decisions?.length) {
-    const decisionList = document.createElement("ul");
-    data.grouping_decisions.forEach((decision) => {
-      const item = document.createElement("li");
-      item.className = "grouping-item";
-      const requiresReview = decision.requires_review ? "Needs review" : "OK";
-      const signalSummary = (decision.signals || [])
-        .map((signal) => `${signal.type} (${signal.weight})`)
-        .join(" · ");
-      item.innerHTML = `
-        <div class="grouping-title">${decision.call_id} • ${decision.decision}</div>
-        <div class="grouping-meta">confidence ${decision.confidence} • ${requiresReview}</div>
-        <div class="grouping-explanation">${decision.explanation || ""}</div>
-        <div class="grouping-meta">${signalSummary || "No signals recorded."}</div>
-      `;
-      decisionList.appendChild(item);
-    });
-    grouping.appendChild(decisionList);
-  } else {
-    grouping.appendChild(document.createTextNode("No grouping decisions yet."));
-  }
-
   const rollups = document.createElement("div");
   rollups.className = "detail-section";
   rollups.innerHTML = "<h2>Rollup History</h2>";
@@ -87,13 +67,21 @@ export async function renderIncidentDetailView({ incidentId, onBack, prefetched 
       summary.textContent = rollup.summary_text;
       const meta = document.createElement("div");
       meta.className = "rollup-meta";
-      meta.textContent = `version ${rollup.version} • confidence ${rollup.confidence}`;
+      meta.textContent = `version ${rollup.version}`;
       const keys = document.createElement("div");
       keys.className = "rollup-meta";
-      const keyText = rollup.key_fields
-        ? JSON.stringify(rollup.key_fields)
-        : "n/a";
-      keys.textContent = `key fields: ${keyText}`;
+      const fields = rollup.key_fields || {};
+      const keyText = [
+        fields.agency,
+        fields.incident_type,
+        fields.address,
+        fields.town,
+        fields.cross_street,
+        fields.poi
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      keys.textContent = `key fields: ${keyText || "n/a"}`;
       const questions = document.createElement("div");
       questions.className = "rollup-meta";
       const open = Array.isArray(rollup.open_questions)
@@ -116,21 +104,6 @@ export async function renderIncidentDetailView({ incidentId, onBack, prefetched 
     rollups.appendChild(rollupList);
   } else {
     rollups.appendChild(document.createTextNode("No rollups yet."));
-  }
-
-  const locations = document.createElement("div");
-  locations.className = "detail-section";
-  locations.innerHTML = "<h2>Locations</h2>";
-  if (data.locations.length) {
-    const locList = document.createElement("ul");
-    data.locations.forEach((loc) => {
-      const item = document.createElement("li");
-      item.textContent = loc.raw_text || loc.rawText;
-      locList.appendChild(item);
-    });
-    locations.appendChild(locList);
-  } else {
-    locations.appendChild(document.createTextNode("No locations yet."));
   }
 
   const feedback = document.createElement("div");
@@ -184,9 +157,7 @@ export async function renderIncidentDetailView({ incidentId, onBack, prefetched 
   container.appendChild(back);
   container.appendChild(header);
   container.appendChild(members);
-  container.appendChild(grouping);
   container.appendChild(rollups);
-  container.appendChild(locations);
   container.appendChild(feedback);
 
   return container;

@@ -1,3 +1,4 @@
+import { listAgencies } from "../api";
 import { DEFAULT_WINDOW_HOURS } from "./config";
 
 function toIso(value) {
@@ -28,8 +29,8 @@ export function createDefaultFilters() {
     end: toIso(end),
     incidentType: "",
     jurisdiction: "",
+    agency: "",
     status: "any",
-    minConfidence: 0,
     mapMode: "markers"
   };
 }
@@ -40,10 +41,8 @@ export function serializeFilters(filters) {
   if (filters.end) params.set("end", filters.end);
   if (filters.incidentType) params.set("incident_type", filters.incidentType);
   if (filters.jurisdiction) params.set("jurisdiction", filters.jurisdiction);
+  if (filters.agency) params.set("agency", filters.agency);
   if (filters.status && filters.status !== "any") params.set("status", filters.status);
-  if (typeof filters.minConfidence === "number") {
-    params.set("min_confidence", String(filters.minConfidence));
-  }
   return params;
 }
 
@@ -107,6 +106,21 @@ export function renderFilterPanel({ filters, onChange }) {
     onChange({ jurisdiction: jurisdictionInput.value.trim() });
   });
 
+  const agencySelect = document.createElement("select");
+  agencySelect.className = "filter-select";
+  const defaultAgency = document.createElement("option");
+  defaultAgency.value = "";
+  defaultAgency.textContent = "Any agency";
+  agencySelect.appendChild(defaultAgency);
+  const unknownAgency = document.createElement("option");
+  unknownAgency.value = "Unknown";
+  unknownAgency.textContent = "Unknown";
+  agencySelect.appendChild(unknownAgency);
+  agencySelect.value = filters.agency || "";
+  agencySelect.addEventListener("change", () => {
+    onChange({ agency: agencySelect.value });
+  });
+
   const statusSelect = document.createElement("select");
   statusSelect.className = "filter-select";
   ["any", "active", "resolved", "pending", "processing", "failed", "duplicate"].forEach(
@@ -122,25 +136,31 @@ export function renderFilterPanel({ filters, onChange }) {
     onChange({ status: statusSelect.value });
   });
 
-  const confidenceInput = document.createElement("input");
-  confidenceInput.type = "number";
-  confidenceInput.min = "0";
-  confidenceInput.max = "1";
-  confidenceInput.step = "0.05";
-  confidenceInput.className = "filter-input";
-  confidenceInput.value = String(filters.minConfidence ?? 0);
-  confidenceInput.addEventListener("change", () => {
-    const parsed = Number(confidenceInput.value);
-    onChange({ minConfidence: Number.isFinite(parsed) ? parsed : 0 });
-  });
-
   grid.appendChild(createField("Start", startInput));
   grid.appendChild(createField("End", endInput));
   grid.appendChild(createField("Incident type", incidentInput));
   grid.appendChild(createField("Jurisdiction", jurisdictionInput));
+  grid.appendChild(createField("Agency", agencySelect));
   grid.appendChild(createField("Status", statusSelect));
-  grid.appendChild(createField("Min confidence", confidenceInput));
 
   container.appendChild(grid);
+  const loadAgencies = async () => {
+    try {
+      const agencies = await listAgencies();
+      agencies.forEach((agency) => {
+        if (!agency?.canonical_name) return;
+        const option = document.createElement("option");
+        option.value = agency.canonical_name;
+        option.textContent = agency.canonical_name;
+        agencySelect.appendChild(option);
+      });
+      if (filters.agency) {
+        agencySelect.value = filters.agency;
+      }
+    } catch (_error) {
+      // Ignore agency load failures; filters remain usable.
+    }
+  };
+  loadAgencies();
   return container;
 }

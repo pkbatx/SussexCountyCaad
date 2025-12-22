@@ -31,13 +31,12 @@ export async function renderIncidentsView({ onSelect, filters }) {
   const appendItems = (items) => {
     items.forEach((incident) => {
       const incidentId = incident.incident_id || incident.incidentId;
-      const address = incident.normalized_address || "No address";
+      const address = incident.address || incident.town || "No address";
       const updatedAt = incident.last_rollup_at || incident.updated_at || "n/a";
       const memberCount = incident.member_count ?? 0;
       const summary = incident.latest_summary || "No rollup summary yet.";
-      const confidence = incident.group_confidence ?? incident.groupConfidence ?? 0;
       const statusValue = incident.status || "active";
-      const metaLine = [incident.incident_type, incident.jurisdiction]
+      const metaLine = [incident.agency || "Unknown", incident.incident_type]
         .filter(Boolean)
         .join(" · ");
       const item = document.createElement("li");
@@ -53,7 +52,6 @@ export async function renderIncidentsView({ onSelect, filters }) {
           <span class="status-badge status-${statusValue}">${statusValue}</span>
           <div class="incident-updated">${formatTimestamp(updatedAt)}</div>
           <div class="incident-meta">calls ${memberCount}</div>
-          <div class="incident-meta">confidence ${confidence}</div>
         </div>
       `;
       item.addEventListener("click", () => onSelect(incidentId));

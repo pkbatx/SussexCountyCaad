@@ -107,6 +107,14 @@ function validateExtractionEvidence(payload) {
   const fieldConfidence = payload.field_confidence || {};
   const evidence = payload.evidence || {};
 
+  if (
+    Object.prototype.hasOwnProperty.call(payload, "agency") &&
+    payload.agency !== null &&
+    typeof payload.agency !== "string"
+  ) {
+    errors.push({ field: "agency", message: "Agency must be string or null." });
+  }
+
   requiredFields.forEach((field) => {
     if (typeof fieldConfidence[field] !== "number") {
       errors.push({ field, message: `Missing field confidence for ${field}.` });

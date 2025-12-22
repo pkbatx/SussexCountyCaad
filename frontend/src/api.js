@@ -43,6 +43,10 @@ export function getIncidentDetail(incidentId) {
   return fetchJson(`/api/incidents/${incidentId}`);
 }
 
+export function listAgencies() {
+  return fetchJson("/api/agencies");
+}
+
 export function listNotifications() {
   return fetchJson("/api/notifications");
 }

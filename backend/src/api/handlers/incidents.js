@@ -4,10 +4,8 @@ const {
   listIncidentMembers
 } = require("../../db/queries/incidents");
 const { getCallById } = require("../../db/queries/calls");
-const { listGroupingDecisionsForIncident } = require("../../db/queries/grouping_decisions");
 const { listSummariesForIncident } = require("../../db/queries/summaries");
 const { listRollupsForIncident } = require("../../db/queries/rollups");
-const { listLocationsForSubject } = require("../../db/queries/locations");
 const { parseListFilters } = require("./filters");
 
 function sendJson(res, status, payload) {
@@ -24,6 +22,7 @@ async function listIncidentsHandler(req, res, { db }) {
     end: filters.end,
     incidentType: filters.incidentType,
     jurisdiction: filters.jurisdiction,
+    agency: filters.agency,
     status: filters.status,
     minConfidence: filters.minConfidence
   });
@@ -40,22 +39,27 @@ async function incidentDetailHandler(req, res, { db, incidentId }) {
   const memberCalls = members
     .map((member) => getCallById(db, member.call_id))
     .filter(Boolean);
-  const groupingDecisions = listGroupingDecisionsForIncident(db, incidentId);
   const summaries = listSummariesForIncident(db, incidentId);
   const rollups = listRollupsForIncident(db, incidentId);
-  const locations = listLocationsForSubject(db, {
-    subjectType: "incident",
-    subjectId: incidentId
-  });
+  const latestRollup = rollups[0] || null;
+  const keyFields = latestRollup?.key_fields || {};
+  const operatorFields = {
+    agency: keyFields.agency || null,
+    incident_type: keyFields.incident_type || null,
+    address: keyFields.address || null,
+    town: keyFields.town || null,
+    cross_street: keyFields.cross_street || null,
+    poi: keyFields.poi || null,
+    summary: latestRollup?.summary_text || null
+  };
 
   sendJson(res, 200, {
     incident,
     members,
     member_calls: memberCalls,
-    grouping_decisions: groupingDecisions,
     summaries,
     rollups,
-    locations,
+    operator_fields: operatorFields,
     notifications: []
   });
 }

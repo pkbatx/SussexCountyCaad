@@ -4,8 +4,9 @@ const { hashFile } = require("./hash");
 const { validateIdempotency } = require("./validate");
 const { createCall, updateCallStatus } = require("../db/queries/calls");
 const { ensureStage } = require("../db/queries/stages");
+const { resolveAgency } = require("../pipeline/agency-normalizer");
 
-function ingestFile({ db, pipeline, filePath }) {
+function ingestFile({ db, pipeline, filePath, config }) {
   const stats = fs.statSync(filePath);
   if (!stats.isFile()) {
     return null;
@@ -22,6 +23,13 @@ function ingestFile({ db, pipeline, filePath }) {
     sourcePath: path.resolve(filePath),
     fileSizeBytes: stats.size,
     status: "processing"
+  });
+
+  resolveAgency({
+    db,
+    callId,
+    sourcePath: path.resolve(filePath),
+    config
   });
 
   ensureStage(db, callId, "transcription");

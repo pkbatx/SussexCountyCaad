@@ -28,9 +28,9 @@ npm test && npm run lint
 JavaScript (Node.js 20 LTS) for backend; vanilla JS for UI: Follow standard conventions
 
 ## Recent Changes
+- 006-normalize-agency-fields: Added JavaScript (Node.js >=20 backend, Vite frontend) + Backend: better-sqlite3, ajv, dotenv. Frontend: vite, leaflet, leaflet.heat, leaflet.markercluster.
 - 005-add-ops-map-ui: Added JavaScript (Node.js >=20 backend, Vite frontend) + Backend: better-sqlite3, ajv, dotenv. Frontend: vite, leaflet, leaflet.heat, leaflet.markercluster.
 - 005-add-ops-map-ui: Added Node.js >=20 (backend); JavaScript + Vite (frontend) + Backend: better-sqlite3, ajv, dotenv; Frontend: Vite,
-- 003-incident-centric-stability: Added Node.js (>=20) for backend; Vite-managed frontend with vanilla JS + Backend: better-sqlite3, ajv, dotenv; Frontend: Vite (dev)
 
 
 <!-- MANUAL ADDITIONS START -->

@@ -76,6 +76,9 @@ function loadConfig() {
     referenceAmbiguousAgencies: parseList(
       process.env.REFERENCE_AMBIGUOUS_AGENCIES || "Lakeland,Tri-Pod,Blue Ridge"
     ),
+    agencyRegistryRetentionDays: Number(
+      process.env.AGENCY_REGISTRY_RETENTION_DAYS || 30
+    ),
     feedbackConfidencePenalty: Number(
       process.env.FEEDBACK_CONFIDENCE_PENALTY || 0.05
     ),

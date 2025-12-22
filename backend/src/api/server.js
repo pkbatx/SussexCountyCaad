@@ -9,6 +9,7 @@ const {
   listIncidentsHandler,
   incidentDetailHandler
 } = require("./handlers/incidents");
+const { listAgenciesHandler } = require("./handlers/agencies");
 const { listNotificationsHandler } = require("./handlers/notifications");
 const {
   submitCallFeedbackHandler,
@@ -17,6 +18,7 @@ const {
   listIncidentFeedbackHandler
 } = require("./handlers/feedback");
 const { mapPointsHandler } = require("./handlers/map");
+const { debugCallHandler } = require("./handlers/debug");
 const {
   summaryMetricsHandler,
   summaryTrendsHandler,
@@ -56,8 +58,19 @@ function startApiServer({ config, db, pipeline }) {
       }
     }
 
+    if (req.method === "GET" && req.url.startsWith("/api/agencies")) {
+      return listAgenciesHandler(req, res, { db });
+    }
+
     if (req.method === "GET" && req.url.startsWith("/api/notifications")) {
       return listNotificationsHandler(req, res, { db });
+    }
+
+    if (req.method === "GET" && req.url.startsWith("/api/debug/calls/")) {
+      const parts = req.url.split("?")[0].split("/").filter(Boolean);
+      if (parts.length === 4) {
+        return debugCallHandler(req, res, { db, callId: parts[3] });
+      }
     }
 
     if (req.method === "GET" && req.url.startsWith("/api/map/points")) {

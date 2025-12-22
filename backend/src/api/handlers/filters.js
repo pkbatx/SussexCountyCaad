@@ -22,6 +22,7 @@ function parseListFilters(req, { defaultLimit = 50, maxLimit = 500 } = {}) {
     end: url.searchParams.get("end") || undefined,
     incidentType: url.searchParams.get("incident_type") || undefined,
     jurisdiction: url.searchParams.get("jurisdiction") || undefined,
+    agency: url.searchParams.get("agency") || undefined,
     status: url.searchParams.get("status") || undefined,
     minConfidence: parseNumber(url.searchParams.get("min_confidence"), undefined),
     limit,

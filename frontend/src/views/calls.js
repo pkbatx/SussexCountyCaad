@@ -33,9 +33,9 @@ export async function renderCallsView({ onSelect, filters }) {
       const item = document.createElement("li");
       item.className = "call-item";
       const statusValue = call.status || "unknown";
-      const location =
-        call.address_normalized || call.address_raw || "Location unknown";
-      const metaLine = [call.incident_type, call.jurisdiction]
+      const agency = call.agency || "Unknown";
+      const location = call.address || call.town || "Location unknown";
+      const metaLine = [agency, call.incident_type]
         .filter(Boolean)
         .join(" · ");
       item.innerHTML = `

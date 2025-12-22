@@ -12,7 +12,7 @@ function startWatcher({ config, db, pipeline }) {
     }
     inFlight.add(filePath);
     try {
-      ingestFile({ db, pipeline, filePath });
+      ingestFile({ db, pipeline, filePath, config });
     } catch (error) {
       console.error("[ingest] failed", error);
     } finally {
