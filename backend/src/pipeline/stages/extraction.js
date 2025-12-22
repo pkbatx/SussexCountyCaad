@@ -10,11 +10,14 @@ const { attemptRepair } = require("../../ai/repair");
 const { listTranscriptsForCall } = require("../../db/queries/transcripts");
 const { createMetadataExtract } = require("../../db/queries/metadata");
 const { createAIInvocation } = require("../../db/queries/ai_invocations");
-const { findReferenceCandidatesForText } = require("../../db/queries/reference_data");
+const {
+  findReferenceCandidatesForText,
+  listReferenceCandidates
+} = require("../../db/queries/reference_data");
 const { listFeedbackSignals } = require("../../db/queries/feedback");
 const { getCallById } = require("../../db/queries/calls");
 const { extractFilenameHints } = require("../filename-hints");
-const { resolveAgency } = require("../agency-normalizer");
+const { normalizeAgency, getAgencyCoverageTowns, resolveAgency } = require("../agency-normalizer");
 
 const schemaPath = path.join(__dirname, "../../ai/schema/metadata.json");
 const schemaText = fs.readFileSync(schemaPath, "utf8");
@@ -118,9 +121,11 @@ function buildPrompt({
     "field_confidence must include a numeric 0-1 value for every field (use 0 for unknown).",
     "evidence must include an array for every field (empty array allowed for unknown).",
     "Every non-null field needs at least one evidence item with transcript spans.",
-    "Focus on address, cross streets, jurisdiction, and incident type.",
+    "Focus on address, cross streets, town, and incident type.",
     "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
     "Do not treat ambiguous agency names as location unless the transcript explicitly ties them to a town.",
+    "Cross streets must be street names only. If a town appears alongside a cross street, keep the street in cross_street and put the town in city.",
+    "Agency coverage towns are hints only; only use if supported by transcript evidence or if a street uniquely matches a town candidate.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
     `extracted_at: ${extractedAt}`,
@@ -150,9 +155,11 @@ function buildRepairPrompt({
     "field_confidence must include a numeric 0-1 value for every field (use 0 for unknown).",
     "evidence must include an array for every field (empty array allowed for unknown).",
     "Every non-null field needs at least one evidence item with transcript spans.",
-    "Focus on address, cross streets, jurisdiction, and incident type.",
+    "Focus on address, cross streets, town, and incident type.",
     "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
     "Do not treat ambiguous agency names as location unless the transcript explicitly ties them to a town.",
+    "Cross streets must be street names only. If a town appears alongside a cross street, keep the street in cross_street and put the town in city.",
+    "Agency coverage towns are hints only; only use if supported by transcript evidence or if a street uniquely matches a town candidate.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
     `extracted_at: ${extractedAt}`,
@@ -190,6 +197,24 @@ function candidateMatches(value, candidates) {
   });
 }
 
+function crossStreetLooksLikeTown(value, townCandidates, streetCandidates) {
+  if (!value) {
+    return false;
+  }
+  const streetList = Array.isArray(streetCandidates) ? streetCandidates : [];
+  const townList = Array.isArray(townCandidates) ? townCandidates : [];
+  if (townList.length === 0) {
+    return false;
+  }
+  const townMatch = candidateMatches(value, townList);
+  const streetMatch =
+    streetList.length > 0 ? candidateMatches(value, streetList) : false;
+  if (!townMatch || streetMatch) {
+    return false;
+  }
+  return true;
+}
+
 function validateReferenceCandidates(payload, referenceCandidates) {
   if (!referenceCandidates) {
     return { ok: true, errors: [] };
@@ -219,7 +244,42 @@ function validateReferenceCandidates(payload, referenceCandidates) {
     }
   });
 
+  ["cross_street_1", "cross_street_2"].forEach((field) => {
+    const value = payload[field];
+    if (value && crossStreetLooksLikeTown(value, townCandidates, streetCandidates)) {
+      errors.push({
+        message: "Cross street looks like town name",
+        field
+      });
+    }
+  });
+
   return { ok: errors.length === 0, errors };
+}
+
+function buildCoverageTownCandidates(db, towns, limitPerType) {
+  if (!db || !Array.isArray(towns) || towns.length === 0) {
+    return [];
+  }
+  const collected = [];
+  const seen = new Set();
+  towns.forEach((town) => {
+    const matches = listReferenceCandidates(db, {
+      refType: "town",
+      query: town,
+      limit: limitPerType
+    });
+    matches.forEach((match) => {
+      if (!match || seen.has(match.reference_id)) {
+        return;
+      }
+      seen.add(match.reference_id);
+      if (!limitPerType || collected.length < limitPerType) {
+        collected.push(match);
+      }
+    });
+  });
+  return collected;
 }
 
 function mergeReferenceCandidates(primary, secondary, limitPerType) {
@@ -286,11 +346,28 @@ async function runStage({ config, db, callId, runId, pipeline }) {
     sourcePath: call?.source_path || null,
     config
   });
-  const referenceCandidates = mergeReferenceCandidates(
+  const agencyGuess = normalizeAgency({
+    sourcePath: call?.source_path || null,
+    filenameHints
+  });
+  const agencyCoverageTowns = getAgencyCoverageTowns(agencyGuess.agency);
+  const agencyTownCandidates = buildCoverageTownCandidates(
+    db,
+    agencyCoverageTowns,
+    config.referenceDataMaxCandidates
+  );
+  const baseCandidates = mergeReferenceCandidates(
     transcriptCandidates,
     filenameHints.referenceCandidates,
     config.referenceDataMaxCandidates
   );
+  const referenceCandidates = agencyTownCandidates.length
+    ? mergeReferenceCandidates(
+        { town: agencyTownCandidates },
+        baseCandidates,
+        config.referenceDataMaxCandidates
+      )
+    : baseCandidates;
   const extractedAt = new Date().toISOString();
   const prompt = buildPrompt({
     transcriptText,
@@ -301,7 +378,9 @@ async function runStage({ config, db, callId, runId, pipeline }) {
       raw: filenameHints.raw,
       town_candidates: filenameHints.townCandidates,
       agency_tokens: filenameHints.agencyTokens,
-      ambiguous_agencies: filenameHints.ambiguousAgencies
+      ambiguous_agencies: filenameHints.ambiguousAgencies,
+      agency_name: agencyGuess.agency,
+      agency_coverage_towns: agencyCoverageTowns
     }
   });
   const adapter = createAIAdapter({ config });
@@ -325,7 +404,9 @@ async function runStage({ config, db, callId, runId, pipeline }) {
               raw: filenameHints.raw,
               town_candidates: filenameHints.townCandidates,
               agency_tokens: filenameHints.agencyTokens,
-              ambiguous_agencies: filenameHints.ambiguousAgencies
+              ambiguous_agencies: filenameHints.ambiguousAgencies,
+              agency_name: agencyGuess.agency,
+              agency_coverage_towns: agencyCoverageTowns
             }
           });
 
@@ -435,5 +516,6 @@ async function runStage({ config, db, callId, runId, pipeline }) {
 
 module.exports = {
   runStage,
-  buildPrompt
+  buildPrompt,
+  validateReferenceCandidates
 };

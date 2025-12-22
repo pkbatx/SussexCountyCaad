@@ -21,6 +21,15 @@ test("preserves hyphenated agency names and service type", () => {
   assert.equal(result.serviceType, "EMS");
 });
 
+test("keeps rescue token in canonical agency name", () => {
+  const result = normalizeAgency({
+    sourcePath: "/calls/Blue_Ridge_Rescue_EMS__Gen__042.wav"
+  });
+
+  assert.equal(result.agency, "Blue Ridge Rescue EMS");
+  assert.equal(result.serviceType, "EMS");
+});
+
 test("collapses combined dispatch entity to canonical name", () => {
   const result = normalizeAgency({
     sourcePath: "/calls/Andover_Twp__Andover_Boro_FD__Siren.wav"
