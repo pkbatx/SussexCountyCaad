@@ -11,6 +11,10 @@ function createAIAdapter({ config }) {
     async groupIncident(payload) {
       const client = require("./openai");
       return client.groupIncident({ config, ...payload });
+    },
+    async embedTexts(payload) {
+      const client = require("./openai");
+      return client.embedTexts({ config, ...payload });
     }
   };
 }

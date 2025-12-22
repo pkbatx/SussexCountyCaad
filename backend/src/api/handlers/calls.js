@@ -3,11 +3,32 @@ const { getStagesForCall } = require("../../db/queries/stages");
 const { listTranscriptsForCall } = require("../../db/queries/transcripts");
 const { listSummariesForCall } = require("../../db/queries/summaries");
 const { listMetadataForCall } = require("../../db/queries/metadata");
+const { listLocationsForSubject } = require("../../db/queries/locations");
+const { listReferenceCandidates } = require("../../db/queries/reference_data");
+const { extractTownFromGeocode, normalizeTownQuery } = require("../../geo/town-utils");
 const { parseListFilters } = require("./filters");
 
 function sendJson(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(payload));
+}
+
+function resolveTownFallback(db, callId) {
+  const locations = listLocationsForSubject(db, { subjectType: "call", subjectId: callId });
+  if (!locations.length) {
+    return null;
+  }
+  const town = extractTownFromGeocode(locations[0]?.geocode_json);
+  const normalized = normalizeTownQuery(town);
+  if (!normalized) {
+    return null;
+  }
+  const matches = listReferenceCandidates(db, {
+    refType: "town",
+    query: normalized,
+    limit: 1
+  });
+  return matches[0]?.canonical_name || null;
 }
 
 async function readJsonBody(req) {
@@ -73,7 +94,10 @@ async function callDetailHandler(req, res, { db, callId }) {
       extracted?.address_normalized ??
       extracted?.address_raw ??
       null,
-    town: extracted?.city ?? extracted?.jurisdiction ?? null,
+    town:
+      extracted?.city ??
+      extracted?.jurisdiction ??
+      resolveTownFallback(db, callId),
     cross_street:
       extracted?.cross_street_1 ??
       extracted?.cross_street_2 ??

@@ -1,6 +1,9 @@
 const { listIncidentMembers, getIncidentById } = require("../../db/queries/incidents");
 const { listGroupingDecisionsForIncident } = require("../../db/queries/grouping_decisions");
 const { createIncidentRollup } = require("../../db/queries/rollups");
+const { listLocationsForSubject } = require("../../db/queries/locations");
+const { listReferenceCandidates } = require("../../db/queries/reference_data");
+const { extractTownFromGeocode, normalizeTownQuery } = require("../../geo/town-utils");
 
 function getIncidentForCall(db, callId) {
   return db
@@ -21,12 +24,12 @@ function listCallSummariesForIncident(db, incidentId) {
 function getLatestIncidentFields(db, incidentId) {
   const row = db
     .prepare(
-      "SELECT calls.agency_name, calls.agency_service_type, meta.payload_json FROM incident_group_members JOIN calls ON calls.call_id = incident_group_members.call_id JOIN metadata_extracts meta ON meta.call_id = incident_group_members.call_id WHERE incident_group_members.incident_id = ? AND meta.schema_version = 'extraction.v2' ORDER BY meta.created_at DESC LIMIT 1"
+      "SELECT calls.call_id, calls.agency_name, calls.agency_service_type, meta.payload_json FROM incident_group_members JOIN calls ON calls.call_id = incident_group_members.call_id JOIN metadata_extracts meta ON meta.call_id = incident_group_members.call_id WHERE incident_group_members.incident_id = ? AND meta.schema_version = 'extraction.v2' ORDER BY meta.created_at DESC LIMIT 1"
     )
     .get(incidentId);
 
   if (!row) {
-    return { agency: null, payload: null };
+    return { callId: null, agency: null, payload: null };
   }
 
   let payload = null;
@@ -37,10 +40,32 @@ function getLatestIncidentFields(db, incidentId) {
   }
 
   return {
+    callId: row.call_id || null,
     agency: row.agency_name || null,
     agencyServiceType: row.agency_service_type || null,
     payload
   };
+}
+
+function resolveTownFallback(db, callId) {
+  if (!callId) {
+    return null;
+  }
+  const locations = listLocationsForSubject(db, { subjectType: "call", subjectId: callId });
+  if (!locations.length) {
+    return null;
+  }
+  const town = extractTownFromGeocode(locations[0]?.geocode_json);
+  const normalized = normalizeTownQuery(town);
+  if (!normalized) {
+    return null;
+  }
+  const matches = listReferenceCandidates(db, {
+    refType: "town",
+    query: normalized,
+    limit: 1
+  });
+  return matches[0]?.canonical_name || null;
 }
 
 function buildHeadline({ agency, incidentType, address, town, crossStreet, poi }) {
@@ -95,7 +120,10 @@ async function runStage({ db, callId, runId, pipeline }) {
   const latestFields = getLatestIncidentFields(db, incidentId);
   const payload = latestFields.payload || {};
   const address = payload.address_normalized || payload.address_raw || null;
-  const town = payload.city || payload.jurisdiction || null;
+  const town =
+    payload.city ||
+    payload.jurisdiction ||
+    resolveTownFallback(db, latestFields.callId);
   const crossStreet = payload.cross_street_1 || payload.cross_street_2 || null;
   const poi = payload.landmark || null;
   const headline = buildHeadline({

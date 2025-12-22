@@ -30,7 +30,7 @@ function backupDatabase(dbPath) {
   return backupPath;
 }
 
-function resetDatabase() {
+async function resetDatabase() {
   ensureConfirmed();
   const config = loadConfig();
   const dbPath = path.resolve(config.dbPath);
@@ -38,8 +38,11 @@ function resetDatabase() {
 
   const db = openDatabase({ dbPath });
   runMigrations(db);
-  ingestReferenceData({ db, config });
-  db.close();
+  try {
+    await ingestReferenceData({ db, config });
+  } finally {
+    db.close();
+  }
 
   if (backupPath) {
     console.log(`[db] archived ${dbPath} -> ${backupPath}`);
@@ -47,4 +50,7 @@ function resetDatabase() {
   console.log("[db] reset complete");
 }
 
-resetDatabase();
+resetDatabase().catch((error) => {
+  console.error("[db] reset failed", error);
+  process.exit(1);
+});

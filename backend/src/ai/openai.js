@@ -4,6 +4,7 @@ const { Blob } = require("buffer");
 
 const OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions";
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 
 async function requestJsonCompletion({ config, systemPrompt, userPrompt }) {
   if (!config.openaiApiKey) {
@@ -107,5 +108,33 @@ async function groupIncident({ config, prompt }) {
 module.exports = {
   transcribe,
   extractMetadata,
-  groupIncident
+  groupIncident,
+  async embedTexts({ config, input, model }) {
+    if (!config.openaiApiKey) {
+      throw new Error("OPENAI_API_KEY is required for embeddings");
+    }
+    const startedAt = Date.now();
+    const response = await fetch(OPENAI_EMBEDDINGS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.openaiApiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: model || config.openaiEmbeddingsModel || "text-embedding-3-small",
+        input
+      })
+    });
+    const latencyMs = Date.now() - startedAt;
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json.error?.message || "OpenAI embeddings failed");
+    }
+    return {
+      embeddings: (json.data || []).map((item) => item.embedding),
+      model: json.model,
+      usage: json.usage ?? null,
+      latencyMs
+    };
+  }
 };

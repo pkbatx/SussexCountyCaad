@@ -2,6 +2,11 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { normalizeKey } = require("./queries/reference_data");
+const { createAIAdapter } = require("../ai/adapter");
+const {
+  listReferenceEmbeddings,
+  upsertReferenceEmbedding
+} = require("./queries/reference_embeddings");
 
 function buildReferenceId(refType, canonicalName, scope) {
   const hash = crypto
@@ -103,10 +108,22 @@ function ingestStreetTownData(db, data, source) {
       updated_at: now
     });
   });
+
+  return {
+    streetRecords: streets.map((street) => ({
+      reference_id: buildReferenceId("street", street, source),
+      text: street
+    })),
+    townRecords: towns.map((town) => ({
+      reference_id: buildReferenceId("town", town, source),
+      text: town
+    }))
+  };
 }
 
 function ingestPoiData(db, data, source) {
   const now = new Date().toISOString();
+  const records = [];
   data.forEach((town) => {
     const townName = town?.name || "";
     const zipCodes = town?.zip_codes || [];
@@ -141,11 +158,69 @@ function ingestPoiData(db, data, source) {
         created_at: now,
         updated_at: now
       });
+      records.push({
+        reference_id: buildReferenceId("poi", canonical, townName),
+        text: canonical
+      });
     });
   });
+  return records;
 }
 
-function ingestReferenceData({ db, config }) {
+async function indexReferenceEmbeddings({ db, config, records }) {
+  if (!config.openaiApiKey || !config.openaiEmbeddingsModel) {
+    return;
+  }
+  if (!records.length) {
+    return;
+  }
+  const pending = [];
+  const chunkSize = 400;
+  for (let i = 0; i < records.length; i += chunkSize) {
+    const chunk = records.slice(i, i + chunkSize);
+    const embeddings = listReferenceEmbeddings(db, {
+      referenceIds: chunk.map((entry) => entry.reference_id),
+      model: config.openaiEmbeddingsModel
+    });
+    chunk.forEach((entry) => {
+      if (!embeddings.has(entry.reference_id)) {
+        pending.push(entry);
+      }
+    });
+  }
+  if (!pending.length) {
+    return;
+  }
+
+  const adapter = createAIAdapter({ config });
+  const batchSize = Number(config.openaiEmbeddingsBatchSize || 64);
+  for (let i = 0; i < pending.length; i += batchSize) {
+    const batch = pending.slice(i, i + batchSize);
+    const inputs = batch.map((entry) => entry.text);
+    try {
+      const result = await adapter.embedTexts({
+        input: inputs,
+        model: config.openaiEmbeddingsModel
+      });
+      result.embeddings.forEach((embedding, idx) => {
+        const record = batch[idx];
+        if (!record || !embedding) {
+          return;
+        }
+        upsertReferenceEmbedding(db, {
+          referenceId: record.reference_id,
+          model: result.model || config.openaiEmbeddingsModel,
+          embedding
+        });
+      });
+    } catch (error) {
+      console.warn(`[reference] embeddings failed: ${error.message}`);
+      return;
+    }
+  }
+}
+
+async function ingestReferenceData({ db, config }) {
   const poiPath = config.referencePoiPath;
   const streetPath = config.referenceStreetTownsPath;
   const poiData = loadJson(poiPath);
@@ -163,14 +238,20 @@ function ingestReferenceData({ db, config }) {
     return;
   }
 
+  const embedRecords = [];
   db.transaction(() => {
     if (streetData) {
-      ingestStreetTownData(db, streetData, "sussexstreetstowns");
+      const result = ingestStreetTownData(db, streetData, "sussexstreetstowns");
+      embedRecords.push(...result.streetRecords, ...result.townRecords);
     }
     if (poiData) {
-      ingestPoiData(db, poiData, "sussexpoi");
+      embedRecords.push(...ingestPoiData(db, poiData, "sussexpoi"));
     }
   })();
+
+  if (config.openaiEmbeddingsPrecompute) {
+    await indexReferenceEmbeddings({ db, config, records: embedRecords });
+  }
 }
 
 module.exports = {

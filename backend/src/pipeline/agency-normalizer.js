@@ -94,11 +94,11 @@ const AGENCY_TOWN_COVERAGE = {
   "Glenwood-Pochuck EMS": ["Vernon"],
   "Hampton EMS": ["Hampton", "Lafayette"],
   "Hopatcong EMS": ["Hopatcong"],
-  "Lakeland EMS": ["Hopatcong"],
+  "Lakeland EMS": ["Jefferson", "Hopatcong", "Sparta"],
   "Newton EMS": ["Newton"],
   "Ogdensburg EMS": ["Ogdensburg", "Franklin"],
   "Sparta EMS": ["Sparta"],
-  "Stanhope-Netcong EMS": ["Stanhope"],
+  "Stanhope-Netcong EMS": ["Stanhope", "Netcong"],
   "Stillwater EMS": ["Stillwater"],
   "Sussex Boro EMS": ["Sussex", "Wantage"],
   "Vernon EMS": ["Vernon"],
@@ -120,31 +120,6 @@ const AGENCY_TOWN_COVERAGE = {
   "McAfee FD": ["Vernon"],
   "Montague FD": ["Montague"],
   "Newton FD": ["Newton"],
-  "NJ Forest Fire Service": [
-    "Andover",
-    "Branchville",
-    "Byram",
-    "Frankford",
-    "Franklin",
-    "Fredon",
-    "Green",
-    "Hamburg",
-    "Hampton",
-    "Hardyston",
-    "Hopatcong",
-    "Lafayette",
-    "Montague",
-    "Newton",
-    "Ogdensburg",
-    "Sandyston",
-    "Sparta",
-    "Stanhope",
-    "Stillwater",
-    "Sussex",
-    "Vernon",
-    "Walpack",
-    "Wantage"
-  ],
   "Pochuck FD": ["Vernon"],
   "Sandyston FD": ["Sandyston"],
   "Sparta FD": ["Sparta"],
@@ -273,8 +248,12 @@ function normalizeAgency({ sourcePath, filenameHints } = {}) {
   const cleaned = stripNoise(rawTokens);
   const serviceType = detectServiceType(cleaned);
   const nameTokens = stripServiceTokens(cleaned);
+  const baseCandidate = buildCanonicalName(nameTokens, null);
   const candidate = buildCanonicalName(nameTokens, serviceType);
-  const canonicalName = matchKnownAgency(candidate) || candidate;
+  const canonicalName =
+    matchKnownAgency(candidate) ||
+    matchKnownAgency(baseCandidate) ||
+    candidate;
 
   if (!canonicalName) {
     return { agency: null, serviceType: null, aliases };

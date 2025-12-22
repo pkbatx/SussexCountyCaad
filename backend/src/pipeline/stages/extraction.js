@@ -18,6 +18,8 @@ const { listFeedbackSignals } = require("../../db/queries/feedback");
 const { getCallById } = require("../../db/queries/calls");
 const { extractFilenameHints } = require("../filename-hints");
 const { normalizeAgency, getAgencyCoverageTowns, resolveAgency } = require("../agency-normalizer");
+const { extractUnitCandidates } = require("../unit-normalizer");
+const { rerankReferenceCandidates } = require("../reference-ranker");
 
 const schemaPath = path.join(__dirname, "../../ai/schema/metadata.json");
 const schemaText = fs.readFileSync(schemaPath, "utf8");
@@ -112,8 +114,10 @@ function buildPrompt({
   callId,
   extractedAt,
   referenceCandidates,
-  filenameMetadata
+  filenameMetadata,
+  deterministicUnits
 }) {
+  const unitList = Array.isArray(deterministicUnits) ? deterministicUnits : [];
   return [
     "You output JSON only. No markdown. No extra keys.",
     "Schema version must be extraction.v2.",
@@ -127,6 +131,9 @@ function buildPrompt({
     "Cross streets must be street names only. If a town appears alongside a cross street, keep the street in cross_street and put the town in city.",
     "If the transcript says '<street> on the cross', treat that street as cross_street and do not set city unless a town is explicitly stated.",
     "Agency coverage towns are hints only; only use if supported by transcript evidence or if a street uniquely matches a town candidate.",
+    unitList.length
+      ? `Deterministic unit candidates: ${unitList.join(", ")}. Use only these units.`
+      : "If unit identifiers are unclear, return an empty units list.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
     `extracted_at: ${extractedAt}`,
@@ -138,6 +145,25 @@ function buildPrompt({
   ].join("\n");
 }
 
+function stripReferenceEmbeddings(referenceCandidates) {
+  if (!referenceCandidates || typeof referenceCandidates !== "object") {
+    return referenceCandidates;
+  }
+  const stripped = {};
+  Object.entries(referenceCandidates).forEach(([type, list]) => {
+    stripped[type] = Array.isArray(list)
+      ? list.map((item) => {
+          if (!item || typeof item !== "object") {
+            return item;
+          }
+          const { embedding, ...rest } = item;
+          return rest;
+        })
+      : list;
+  });
+  return stripped;
+}
+
 function buildRepairPrompt({
   transcriptText,
   errors,
@@ -145,8 +171,10 @@ function buildRepairPrompt({
   callId,
   extractedAt,
   referenceCandidates,
-  filenameMetadata
+  filenameMetadata,
+  deterministicUnits
 }) {
+  const unitList = Array.isArray(deterministicUnits) ? deterministicUnits : [];
   return [
     "The previous response failed schema validation.",
     `Errors: ${JSON.stringify(errors)}`,
@@ -162,6 +190,9 @@ function buildRepairPrompt({
     "Cross streets must be street names only. If a town appears alongside a cross street, keep the street in cross_street and put the town in city.",
     "If the transcript says '<street> on the cross', treat that street as cross_street and do not set city unless a town is explicitly stated.",
     "Agency coverage towns are hints only; only use if supported by transcript evidence or if a street uniquely matches a town candidate.",
+    unitList.length
+      ? `Deterministic unit candidates: ${unitList.join(", ")}. Use only these units.`
+      : "If unit identifiers are unclear, return an empty units list.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
     `extracted_at: ${extractedAt}`,
@@ -264,6 +295,39 @@ function adjustTownCrossStreets(payload, referenceCandidates) {
   return payload;
 }
 
+function enforceReferenceCandidates(payload, referenceCandidates) {
+  if (!payload || !referenceCandidates) {
+    return payload;
+  }
+
+  const checks = [
+    { field: "address_normalized", candidates: referenceCandidates.street || [] },
+    { field: "cross_street_1", candidates: referenceCandidates.street || [] },
+    { field: "cross_street_2", candidates: referenceCandidates.street || [] },
+    { field: "landmark", candidates: referenceCandidates.poi || [] },
+    { field: "city", candidates: referenceCandidates.town || [] },
+    { field: "jurisdiction", candidates: referenceCandidates.town || [] }
+  ];
+
+  if (!payload.field_confidence || typeof payload.field_confidence !== "object") {
+    payload.field_confidence = {};
+  }
+  if (!payload.evidence || typeof payload.evidence !== "object") {
+    payload.evidence = {};
+  }
+
+  checks.forEach(({ field, candidates }) => {
+    const value = payload[field];
+    if (value && !candidateMatches(value, candidates)) {
+      payload[field] = null;
+      payload.field_confidence[field] = 0;
+      payload.evidence[field] = [];
+    }
+  });
+
+  return payload;
+}
+
 function validateReferenceCandidates(payload, referenceCandidates) {
   if (!referenceCandidates) {
     return { ok: true, errors: [] };
@@ -358,6 +422,34 @@ function mergeReferenceCandidates(primary, secondary, limitPerType) {
   return merged;
 }
 
+function mergeDeterministicUnits(payload, unitCandidates) {
+  if (!payload || !Array.isArray(unitCandidates) || unitCandidates.length === 0) {
+    return payload;
+  }
+  const allowed = new Set(unitCandidates.map((candidate) => candidate.unit));
+  const evidence = [];
+
+  unitCandidates.forEach((candidate) => {
+    if (candidate?.unit && candidate.evidence) {
+      evidence.push(candidate.evidence);
+    }
+  });
+
+  payload.units = Array.from(allowed.values());
+  if (!payload.evidence || typeof payload.evidence !== "object") {
+    payload.evidence = {};
+  }
+  payload.evidence.units = evidence;
+  if (!payload.field_confidence || typeof payload.field_confidence !== "object") {
+    payload.field_confidence = {};
+  }
+  const current = payload.field_confidence.units;
+  if (typeof current !== "number" || current < 0.6) {
+    payload.field_confidence.units = 0.6;
+  }
+  return payload;
+}
+
 function recordFailure({ db, callId, prompt, result, status, errors, setRecorded }) {
   if (setRecorded) {
     setRecorded();
@@ -386,6 +478,8 @@ async function runStage({ config, db, callId, runId, pipeline }) {
 
   const call = getCallById(db, callId);
   const transcriptText = transcripts[0].text;
+  const unitCandidates = extractUnitCandidates(transcriptText);
+  const deterministicUnits = unitCandidates.map((candidate) => candidate.unit);
   const transcriptCandidates = findReferenceCandidatesForText(db, {
     text: transcriptText,
     limitPerType: config.referenceDataMaxCandidates
@@ -417,12 +511,19 @@ async function runStage({ config, db, callId, runId, pipeline }) {
         config.referenceDataMaxCandidates
       )
     : baseCandidates;
+  const rankedCandidates = await rerankReferenceCandidates({
+    db,
+    config,
+    text: transcriptText,
+    candidates: referenceCandidates
+  });
+  const sanitizedReferenceCandidates = stripReferenceEmbeddings(rankedCandidates);
   const extractedAt = new Date().toISOString();
   const prompt = buildPrompt({
     transcriptText,
     callId,
     extractedAt,
-    referenceCandidates,
+    referenceCandidates: sanitizedReferenceCandidates,
     filenameMetadata: {
       raw: filenameHints.raw,
       town_candidates: filenameHints.townCandidates,
@@ -430,7 +531,8 @@ async function runStage({ config, db, callId, runId, pipeline }) {
       ambiguous_agencies: filenameHints.ambiguousAgencies,
       agency_name: agencyGuess.agency,
       agency_coverage_towns: agencyCoverageTowns
-    }
+    },
+    deterministicUnits
   });
   const adapter = createAIAdapter({ config });
   const maxAttempts = 3;
@@ -448,7 +550,7 @@ async function runStage({ config, db, callId, runId, pipeline }) {
             raw: lastRaw,
             callId,
             extractedAt,
-            referenceCandidates,
+            referenceCandidates: sanitizedReferenceCandidates,
             filenameMetadata: {
               raw: filenameHints.raw,
               town_candidates: filenameHints.townCandidates,
@@ -456,7 +558,8 @@ async function runStage({ config, db, callId, runId, pipeline }) {
               ambiguous_agencies: filenameHints.ambiguousAgencies,
               agency_name: agencyGuess.agency,
               agency_coverage_towns: agencyCoverageTowns
-            }
+            },
+            deterministicUnits
           });
 
     const result = await adapter.extractMetadata({ prompt: currentPrompt });
@@ -481,11 +584,15 @@ async function runStage({ config, db, callId, runId, pipeline }) {
       continue;
     }
 
-    payload = adjustTownCrossStreets(payload, referenceCandidates);
+    payload = adjustTownCrossStreets(payload, sanitizedReferenceCandidates);
+    payload = enforceReferenceCandidates(payload, sanitizedReferenceCandidates);
 
     const validation = validatePayload(schemaPath, payload);
     const evidenceCheck = validateExtractionEvidence(payload);
-    const referenceCheck = validateReferenceCandidates(payload, referenceCandidates);
+    const referenceCheck = validateReferenceCandidates(
+      payload,
+      sanitizedReferenceCandidates
+    );
     lastErrors = [
       ...(validation.errors || []),
       ...(evidenceCheck.errors || []).map((error) => ({
@@ -543,10 +650,14 @@ async function runStage({ config, db, callId, runId, pipeline }) {
     config
   });
   payload.agency = agencyResult.agency;
+  mergeDeterministicUnits(payload, unitCandidates);
 
   const finalValidation = validatePayload(schemaPath, payload);
   const finalEvidenceCheck = validateExtractionEvidence(payload);
-  const finalReferenceCheck = validateReferenceCandidates(payload, referenceCandidates);
+  const finalReferenceCheck = validateReferenceCandidates(
+    payload,
+    sanitizedReferenceCandidates
+  );
   if (!finalValidation.ok || !finalEvidenceCheck.ok || !finalReferenceCheck.ok) {
     throw new Error("Metadata extraction schema validation failed");
   }

@@ -11,7 +11,7 @@ async function main() {
   const db = openDatabase(config);
 
   runMigrations(db);
-  ingestReferenceData({ db, config });
+  await ingestReferenceData({ db, config });
 
   const pipeline = startPipeline({ config, db });
   startApiServer({ config, db, pipeline });

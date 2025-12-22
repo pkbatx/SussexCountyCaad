@@ -59,6 +59,14 @@ function loadConfig() {
     openaiModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
     openaiTranscriptionModel:
       process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-4o-transcribe",
+    openaiEmbeddingsModel:
+      process.env.OPENAI_EMBEDDINGS_MODEL || "text-embedding-3-small",
+    openaiEmbeddingsBatchSize: Number(
+      process.env.OPENAI_EMBEDDINGS_BATCH_SIZE || 64
+    ),
+    openaiEmbeddingsPrecompute: parseBool(
+      process.env.OPENAI_EMBEDDINGS_PRECOMPUTE || "false"
+    ),
     transcriptionHintMaxCandidates: Number(
       process.env.TRANSCRIPTION_HINT_MAX_CANDIDATES || 8
     ),
