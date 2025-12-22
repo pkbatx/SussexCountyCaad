@@ -125,6 +125,7 @@ function buildPrompt({
     "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
     "Do not treat ambiguous agency names as location unless the transcript explicitly ties them to a town.",
     "Cross streets must be street names only. If a town appears alongside a cross street, keep the street in cross_street and put the town in city.",
+    "If the transcript says '<street> on the cross', treat that street as cross_street and do not set city unless a town is explicitly stated.",
     "Agency coverage towns are hints only; only use if supported by transcript evidence or if a street uniquely matches a town candidate.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
@@ -159,6 +160,7 @@ function buildRepairPrompt({
     "Prefer provided reference candidates for street/town/poi fields; if no candidate matches, set field to null.",
     "Do not treat ambiguous agency names as location unless the transcript explicitly ties them to a town.",
     "Cross streets must be street names only. If a town appears alongside a cross street, keep the street in cross_street and put the town in city.",
+    "If the transcript says '<street> on the cross', treat that street as cross_street and do not set city unless a town is explicitly stated.",
     "Agency coverage towns are hints only; only use if supported by transcript evidence or if a street uniquely matches a town candidate.",
     "If uncertain, set the field to null or empty and use low confidence.",
     `call_id: ${callId}`,
@@ -213,6 +215,53 @@ function crossStreetLooksLikeTown(value, townCandidates, streetCandidates) {
     return false;
   }
   return true;
+}
+
+function adjustTownCrossStreets(payload, referenceCandidates) {
+  if (!payload || !referenceCandidates) {
+    return payload;
+  }
+  const streetCandidates = referenceCandidates.street || [];
+  const townCandidates = referenceCandidates.town || [];
+  const hasTownCandidates = townCandidates.length > 0;
+  const hasStreetCandidates = streetCandidates.length > 0;
+
+  const cityValue = payload.city;
+  const cross1Value = payload.cross_street_1;
+  const cross2Value = payload.cross_street_2;
+
+  const cityIsTown = hasTownCandidates && candidateMatches(cityValue, townCandidates);
+  const cityIsStreet = hasStreetCandidates && candidateMatches(cityValue, streetCandidates);
+  const cross1IsTown =
+    hasTownCandidates && candidateMatches(cross1Value, townCandidates);
+  const cross1IsStreet =
+    hasStreetCandidates && candidateMatches(cross1Value, streetCandidates);
+  const cross2IsTown =
+    hasTownCandidates && candidateMatches(cross2Value, townCandidates);
+  const cross2IsStreet =
+    hasStreetCandidates && candidateMatches(cross2Value, streetCandidates);
+
+  if (!cross1Value && cityValue && !cityIsTown && cityIsStreet) {
+    payload.cross_street_1 = cityValue;
+    payload.city = null;
+  }
+
+  if (cross1Value && cross1IsTown && !cross1IsStreet && !cityIsTown) {
+    payload.city = cross1Value;
+    payload.cross_street_1 = null;
+  }
+
+  if (cross2Value && cross2IsTown && !cross2IsStreet && !cityIsTown) {
+    payload.city = cross2Value;
+    payload.cross_street_2 = null;
+  }
+
+  if (!payload.cross_street_1 && payload.cross_street_2) {
+    payload.cross_street_1 = payload.cross_street_2;
+    payload.cross_street_2 = null;
+  }
+
+  return payload;
 }
 
 function validateReferenceCandidates(payload, referenceCandidates) {
@@ -432,6 +481,8 @@ async function runStage({ config, db, callId, runId, pipeline }) {
       continue;
     }
 
+    payload = adjustTownCrossStreets(payload, referenceCandidates);
+
     const validation = validatePayload(schemaPath, payload);
     const evidenceCheck = validateExtractionEvidence(payload);
     const referenceCheck = validateReferenceCandidates(payload, referenceCandidates);
@@ -517,5 +568,6 @@ async function runStage({ config, db, callId, runId, pipeline }) {
 module.exports = {
   runStage,
   buildPrompt,
-  validateReferenceCandidates
+  validateReferenceCandidates,
+  adjustTownCrossStreets
 };

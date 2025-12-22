@@ -43,6 +43,34 @@ function getLatestIncidentFields(db, incidentId) {
   };
 }
 
+function buildHeadline({ agency, incidentType, address, town, crossStreet, poi }) {
+  const parts = [];
+  if (agency) {
+    parts.push(agency);
+  }
+  if (incidentType) {
+    parts.push(incidentType);
+  }
+  const locationParts = [];
+  if (address) {
+    locationParts.push(address);
+  }
+  if (town) {
+    locationParts.push(town);
+  }
+  let location = locationParts.join(", ");
+  if (crossStreet) {
+    location = location ? `${location} @ ${crossStreet}` : crossStreet;
+  }
+  if (!location && poi) {
+    location = poi;
+  }
+  if (location) {
+    parts.push(location);
+  }
+  return parts.join(" · ").trim();
+}
+
 async function runStage({ db, callId, runId, pipeline }) {
   const incidentId = getIncidentForCall(db, callId);
   if (!incidentId) {
@@ -70,6 +98,14 @@ async function runStage({ db, callId, runId, pipeline }) {
   const town = payload.city || payload.jurisdiction || null;
   const crossStreet = payload.cross_street_1 || payload.cross_street_2 || null;
   const poi = payload.landmark || null;
+  const headline = buildHeadline({
+    agency: latestFields.agency,
+    incidentType: payload.incident_type || null,
+    address,
+    town,
+    crossStreet,
+    poi
+  });
   const keyFields = {
     agency: latestFields.agency,
     incident_type: payload.incident_type || null,
@@ -99,7 +135,7 @@ async function runStage({ db, callId, runId, pipeline }) {
   createIncidentRollup(db, {
     incidentId,
     runId,
-    summaryText: combined,
+    summaryText: headline || combined,
     latestUpdate: callSummaries.slice(0, 2).map((row) => row.summary_text),
     keyFields,
     confidence: incident?.group_confidence ?? 0,

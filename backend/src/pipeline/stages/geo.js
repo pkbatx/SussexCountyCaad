@@ -30,27 +30,42 @@ function matchReference(value, candidates) {
   );
 }
 
-function buildGeocodeQuery(payload, townFallback, rawText) {
+function buildGeocodeQueries(payload, townFallback, rawText) {
+  const queries = [];
   if (!payload) {
     if (!rawText) {
-      return null;
+      return queries;
     }
     const city = townFallback || "Sussex County";
-    return `${rawText}, ${city}, NJ`;
+    queries.push(`${rawText}, ${city}, NJ`);
+    return queries;
   }
   const city =
     payload.city || payload.jurisdiction || townFallback || "Sussex County";
-  if (payload.cross_street_1 && payload.cross_street_2) {
-    return `${payload.cross_street_1} and ${payload.cross_street_2}, ${city}, NJ`;
-  }
   const address = payload.address_normalized || payload.address_raw;
+  const cross1 = payload.cross_street_1;
+  const cross2 = payload.cross_street_2;
+
+  if (address && cross1) {
+    queries.push(`${address} and ${cross1}, ${city}, NJ`);
+  }
+  if (cross1 && cross2) {
+    queries.push(`${cross1} and ${cross2}, ${city}, NJ`);
+  }
   if (address) {
-    return `${address}, ${city}, NJ`;
+    queries.push(`${address}, ${city}, NJ`);
+  }
+  if (cross1) {
+    queries.push(`${cross1}, ${city}, NJ`);
   }
   if (payload.landmark) {
-    return `${payload.landmark}, ${city}, NJ`;
+    queries.push(`${payload.landmark}, ${city}, NJ`);
   }
-  return null;
+  if (rawText) {
+    queries.push(`${rawText}, ${city}, NJ`);
+  }
+
+  return Array.from(new Set(queries));
 }
 
 async function runStage({ config, db, callId }) {
@@ -70,9 +85,17 @@ async function runStage({ config, db, callId }) {
   let referenceCandidates = { street: [], town: [], poi: [] };
 
   if (payload) {
-    rawText = payload.address_raw || payload.landmark || payload.address_normalized;
+    rawText =
+      payload.address_raw ||
+      payload.address_normalized ||
+      payload.cross_street_1 ||
+      payload.landmark;
     if (payload.address_raw && payload.field_confidence) {
       confidence = payload.field_confidence.address_raw ?? null;
+    } else if (payload.cross_street_1 && payload.field_confidence) {
+      confidence = payload.field_confidence.cross_street_1 ?? null;
+    } else if (payload.cross_street_2 && payload.field_confidence) {
+      confidence = payload.field_confidence.cross_street_2 ?? null;
     } else if (payload.landmark && payload.field_confidence) {
       confidence = payload.field_confidence.landmark ?? null;
     } else if (payload.address_normalized && payload.field_confidence) {
@@ -125,8 +148,8 @@ async function runStage({ config, db, callId }) {
   }
 
   const townFallback = referenceCandidates.town?.[0]?.canonical_name || null;
-  const query = buildGeocodeQuery(payload, townFallback, rawText);
-  if (!query || !config.mapboxAccessToken) {
+  const queries = buildGeocodeQueries(payload, townFallback, rawText);
+  if (!queries.length || !config.mapboxAccessToken) {
     createLocationCandidate(db, {
       subjectType: "call",
       subjectId: callId,
@@ -139,7 +162,20 @@ async function runStage({ config, db, callId }) {
   }
 
   try {
-    const geocode = await geocodeMapbox({ config, query });
+    let geocode = null;
+    let query = null;
+    for (const candidate of queries) {
+      const result = await geocodeMapbox({ config, query: candidate });
+      const top = result.response?.features?.[0] || null;
+      if (top) {
+        geocode = result;
+        query = candidate;
+        break;
+      }
+    }
+    if (!geocode) {
+      throw new Error("Mapbox geocoding returned no results");
+    }
     const top = geocode.response?.features?.[0] || null;
     const center = Array.isArray(top?.center) ? top.center : null;
     const longitude = center ? center[0] : null;
@@ -171,5 +207,6 @@ async function runStage({ config, db, callId }) {
 }
 
 module.exports = {
-  runStage
+  runStage,
+  buildGeocodeQueries
 };

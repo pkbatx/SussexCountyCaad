@@ -63,13 +63,12 @@ const KNOWN_AGENCIES = [
   "Montague FD",
   "Newton EMS",
   "Newton FD",
-  "NJ Forest Fire Service FD",
+  "NJ Forest Fire Service",
   "Ogdensburg EMS",
   "Pochuck FD",
   "Sandyston FD",
   "Sparta EMS",
   "Sparta FD",
-  "Stanhope EMS",
   "Stanhope FD",
   "Stanhope-Netcong EMS",
   "Stillwater EMS",
@@ -99,7 +98,6 @@ const AGENCY_TOWN_COVERAGE = {
   "Newton EMS": ["Newton"],
   "Ogdensburg EMS": ["Ogdensburg", "Franklin"],
   "Sparta EMS": ["Sparta"],
-  "Stanhope EMS": ["Stanhope"],
   "Stanhope-Netcong EMS": ["Stanhope"],
   "Stillwater EMS": ["Stillwater"],
   "Sussex Boro EMS": ["Sussex", "Wantage"],
@@ -122,6 +120,31 @@ const AGENCY_TOWN_COVERAGE = {
   "McAfee FD": ["Vernon"],
   "Montague FD": ["Montague"],
   "Newton FD": ["Newton"],
+  "NJ Forest Fire Service": [
+    "Andover",
+    "Branchville",
+    "Byram",
+    "Frankford",
+    "Franklin",
+    "Fredon",
+    "Green",
+    "Hamburg",
+    "Hampton",
+    "Hardyston",
+    "Hopatcong",
+    "Lafayette",
+    "Montague",
+    "Newton",
+    "Ogdensburg",
+    "Sandyston",
+    "Sparta",
+    "Stanhope",
+    "Stillwater",
+    "Sussex",
+    "Vernon",
+    "Walpack",
+    "Wantage"
+  ],
   "Pochuck FD": ["Vernon"],
   "Sandyston FD": ["Sandyston"],
   "Sparta FD": ["Sparta"],
@@ -187,9 +210,15 @@ function stripNoise(tokens) {
 }
 
 function stripServiceTokens(tokens) {
+  const normalizedSet = new Set(tokens.map(normalizeToken));
+  const preserveForestFire =
+    normalizedSet.has("forest") && normalizedSet.has("service");
   return tokens.filter((token) => {
     const normalized = normalizeToken(token);
     if (normalized === "rescue") {
+      return true;
+    }
+    if (normalized === "fire" && preserveForestFire) {
       return true;
     }
     return !SERVICE_TOKEN_MAP.has(normalized);
