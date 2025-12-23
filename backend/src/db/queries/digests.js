@@ -139,9 +139,23 @@ function listTownServiceCounts(db, { windowStart, windowEnd, filters, limit = 20
     .all(...filter.params, limit);
 }
 
+function listDigestTranscripts(db, { windowStart, windowEnd, filters, limit = 50 } = {}) {
+  const filter = buildDigestFilter({ windowStart, windowEnd, filters });
+  const where = appendCondition(
+    filter.where,
+    "transcripts.text IS NOT NULL AND transcripts.text <> ''"
+  );
+  return db
+    .prepare(
+      `SELECT calls.call_id as call_id, calls.first_seen_at as first_seen_at, calls.agency_name as agency_name, calls.service_type as service_type, json_extract(meta.payload_json, '$.incident_type') as incident_type, COALESCE(json_extract(meta.payload_json, '$.city'), json_extract(meta.payload_json, '$.jurisdiction')) as town, json_extract(meta.payload_json, '$.address_normalized') as address, COALESCE(json_extract(meta.payload_json, '$.cross_street_1'), json_extract(meta.payload_json, '$.cross_street_2')) as cross_street, json_extract(meta.payload_json, '$.landmark') as poi, transcripts.text as transcript FROM calls ${filter.joins} LEFT JOIN transcripts ON transcripts.call_id = calls.call_id AND transcripts.created_at = (SELECT MAX(created_at) FROM transcripts WHERE call_id = calls.call_id) ${where} ORDER BY calls.first_seen_at DESC LIMIT ?`
+    )
+    .all(...filter.params, limit);
+}
+
 module.exports = {
   getLatestDigestSummary,
   createDigestSummary,
   countCallsInWindow,
-  listTownServiceCounts
+  listTownServiceCounts,
+  listDigestTranscripts
 };

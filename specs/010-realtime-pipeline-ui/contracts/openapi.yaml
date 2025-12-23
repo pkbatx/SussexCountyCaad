@@ -1,0 +1,94 @@
+openapi: 3.0.3
+info:
+  title: SussexCountyCAAD Realtime Updates API
+  version: 1.0.0
+paths:
+  /api/events:
+    get:
+      summary: Realtime event stream
+      description: Server-Sent Events stream for incremental updates.
+      responses:
+        '200':
+          description: SSE stream
+  /api/incidents:
+    get:
+      summary: List incidents
+      parameters:
+        - in: query
+          name: start
+          schema: { type: string }
+        - in: query
+          name: end
+          schema: { type: string }
+        - in: query
+          name: agency
+          schema: { type: string }
+        - in: query
+          name: town
+          schema: { type: string }
+        - in: query
+          name: incident_type
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Incident feed
+  /api/calls:
+    get:
+      summary: List calls
+      parameters:
+        - in: query
+          name: start
+          schema: { type: string }
+        - in: query
+          name: end
+          schema: { type: string }
+        - in: query
+          name: agency
+          schema: { type: string }
+        - in: query
+          name: town
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Call feed
+  /api/summary/digests:
+    get:
+      summary: Time-window summaries
+      parameters:
+        - in: query
+          name: window
+          schema: { type: string }
+      responses:
+        '200':
+          description: Digest summaries
+  /api/summary/insights:
+    get:
+      summary: Aggregated metrics
+      parameters:
+        - in: query
+          name: start
+          schema: { type: string }
+        - in: query
+          name: end
+          schema: { type: string }
+      responses:
+        '200':
+          description: Insight metrics

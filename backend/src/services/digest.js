@@ -2,9 +2,10 @@ const {
   getLatestDigestSummary,
   createDigestSummary,
   countCallsInWindow,
-  listTownServiceCounts
+  listTownServiceCounts,
+  listDigestTranscripts
 } = require("../db/queries/digests");
-const { summarizeDigest } = require("../ai/openai");
+const { summarizeDigest, summarizeTranscriptDigest } = require("../ai/openai");
 
 const WINDOW_DEFINITIONS = [
   { label: "24h", hours: 24, maxLines: 8, detailLevel: "detailed" },
@@ -12,6 +13,49 @@ const WINDOW_DEFINITIONS = [
   { label: "30d", hours: 24 * 30, maxLines: 4, detailLevel: "overview" }
 ];
 const MAX_AGENCIES_PER_TOWN = 3;
+const MAX_TRANSCRIPT_CHARS = 480;
+
+function clampText(text, maxChars) {
+  if (!text) return "";
+  const normalized = String(text).replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars).trim()}…`;
+}
+
+function buildTranscriptInputs(rows, maxItems) {
+  return rows
+    .filter((row) => row && row.transcript)
+    .slice(0, maxItems)
+    .map((row) => ({
+      call_id: row.call_id,
+      timestamp: row.first_seen_at,
+      agency: row.agency_name || "Unknown",
+      service_type: row.service_type || null,
+      incident_type: row.incident_type || null,
+      town: row.town || null,
+      address: row.address || null,
+      cross_street: row.cross_street || null,
+      poi: row.poi || null,
+      transcript: clampText(row.transcript, MAX_TRANSCRIPT_CHARS)
+    }));
+}
+
+function buildTranscriptFallbackLines(transcripts, maxLines) {
+  if (!transcripts.length) {
+    return [];
+  }
+  return transcripts.slice(0, maxLines).map((entry) => {
+    const label = entry.agency || "Unknown";
+    const detailParts = [entry.incident_type, entry.address || entry.town]
+      .filter(Boolean)
+      .join(" · ");
+    const snippet = entry.transcript || "";
+    if (detailParts) {
+      return `${label} — ${detailParts}`;
+    }
+    return `${label} — ${snippet}`.trim();
+  });
+}
 
 function toWindowRange(hours) {
   const end = new Date();
@@ -21,6 +65,19 @@ function toWindowRange(hours) {
 
 function shouldRefresh({ latest, callCount, refreshHours, refreshCallThreshold }) {
   if (!latest) return true;
+  if (!latest.summary_text || latest.summary_text.trim() === "") {
+    return true;
+  }
+  if (latest.summary_json) {
+    try {
+      const payload = JSON.parse(latest.summary_json);
+      if (Array.isArray(payload.lines) && payload.lines.length === 0) {
+        return true;
+      }
+    } catch (_error) {
+      return true;
+    }
+  }
   const lastCreated = new Date(latest.created_at || latest.updated_at || 0);
   const ageHours = (Date.now() - lastCreated.getTime()) / (60 * 60 * 1000);
   if (Number.isFinite(refreshHours) && ageHours >= refreshHours) {
@@ -103,8 +160,20 @@ async function buildDigest({ db, config, windowLabel, windowStart, windowEnd, ma
   const rows = listTownServiceCounts(db, { windowStart, windowEnd, filters });
   const townEntries = formatTownCounts(rows, maxLines);
   const fallbackLines = buildFallbackLines(townEntries);
+  const transcriptLimit =
+    detailLevel === "detailed" ? 36 : detailLevel === "summary" ? 24 : 16;
+  const transcriptRows = listDigestTranscripts(db, {
+    windowStart,
+    windowEnd,
+    filters,
+    limit: transcriptLimit
+  });
+  const transcriptInputs = buildTranscriptInputs(
+    transcriptRows,
+    transcriptLimit
+  );
 
-  if (!config.openaiApiKey || townEntries.length === 0) {
+  if (!config.openaiApiKey || (townEntries.length === 0 && transcriptInputs.length === 0)) {
     return createDigestSummary(db, {
       windowLabel,
       windowStart,
@@ -119,18 +188,25 @@ async function buildDigest({ db, config, windowLabel, windowStart, windowEnd, ma
     window_label: windowLabel,
     detail_level: detailLevel,
     max_lines: maxLines,
-    towns: townEntries
+    transcripts: transcriptInputs,
+    fallback_counts: townEntries
   });
 
-  let summaryLines = fallbackLines;
+  let summaryLines = transcriptInputs.length
+    ? buildTranscriptFallbackLines(transcriptInputs, maxLines)
+    : fallbackLines;
   try {
-    const result = await summarizeDigest({ config, prompt });
+    const result = transcriptInputs.length
+      ? await summarizeTranscriptDigest({ config, prompt })
+      : await summarizeDigest({ config, prompt });
     const payload = JSON.parse(result.content || "{}");
     if (Array.isArray(payload.lines)) {
       summaryLines = payload.lines.filter((line) => typeof line === "string");
     }
   } catch (_error) {
-    summaryLines = fallbackLines;
+    summaryLines = transcriptInputs.length
+      ? buildTranscriptFallbackLines(transcriptInputs, maxLines)
+      : fallbackLines;
   }
   summaryLines = summaryLines.slice(0, maxLines);
 

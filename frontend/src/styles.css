@@ -171,6 +171,29 @@ a {
   gap: 10px;
 }
 
+.digest-block {
+  gap: 8px;
+}
+
+.digest-text-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.digest-bullets {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.digest-bullets li {
+  margin-bottom: 6px;
+}
+
 .digest-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -308,6 +331,18 @@ a {
   gap: 8px;
 }
 
+.map-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.map-controls-row .map-controls {
+  margin-bottom: 0;
+}
+
 .map-controls {
   display: flex;
   gap: 8px;
@@ -440,10 +475,76 @@ a {
   font-size: 12px;
 }
 
+.filter-grid--two .filter-input {
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
 .filter-input:focus,
 .filter-select:focus {
   outline: none;
   border-color: #334155;
+}
+
+.listbox {
+  position: relative;
+}
+
+.listbox-button {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.listbox-options {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 240px;
+  overflow: auto;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.listbox-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.listbox-option.active {
+  background: #1a2330;
+}
+
+.listbox-option.selected .listbox-check {
+  color: var(--text);
+}
+
+.listbox-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.listbox-check {
+  width: 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
 }
 
 .button.active {
@@ -631,6 +732,27 @@ a {
   gap: 6px;
 }
 
+.agency-more {
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.agency-more:hover {
+  color: var(--text);
+  border-color: #475569;
+}
+
+.agency-extra {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .agency-chip {
   font-size: 10px;
   padding: 2px 6px;
@@ -805,6 +927,18 @@ a {
 .button.small {
   padding: 4px 8px;
   font-size: 12px;
+}
+
+.button:focus-visible,
+.status-chip:focus-visible,
+.service-chip:focus-visible,
+.agency-item input:focus-visible,
+.filter-input:focus-visible,
+.filter-select:focus-visible,
+.thumb-button:focus-visible,
+.agency-more:focus-visible {
+  outline: 2px solid #64748b;
+  outline-offset: 2px;
 }
 
 .metadata-block {
@@ -986,6 +1120,12 @@ a {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.call-detail,
+.incident-detail {
+  width: min(100%, 760px);
+  margin-right: auto;
 }
 
 .detail-title {

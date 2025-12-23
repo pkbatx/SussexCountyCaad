@@ -1,4 +1,4 @@
-import { serializeFilters } from "./views/filters";
+import { serializeFilters } from "./state/filters";
 
 async function fetchJson(path, options = {}) {
   const response = await fetch(path, options);

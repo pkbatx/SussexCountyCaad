@@ -42,6 +42,22 @@ function loadJson(filePath) {
   return JSON.parse(fs.readFileSync(resolved, "utf8"));
 }
 
+function resolveReferencePath(configPath, fallbackPath) {
+  const normalized = configPath ? path.resolve(configPath) : null;
+  if (normalized && fs.existsSync(normalized)) {
+    return normalized;
+  }
+  if (fallbackPath && fs.existsSync(fallbackPath)) {
+    if (normalized && normalized !== fallbackPath) {
+      console.warn(
+        `[reference] fallback to ${fallbackPath} (missing ${normalized})`
+      );
+    }
+    return fallbackPath;
+  }
+  return normalized || null;
+}
+
 function upsertReference(db, record) {
   const stmt = db.prepare(
     "INSERT INTO reference_data (reference_id, ref_type, canonical_name, aliases_json, normalized_key, raw_address, latitude, longitude, source, metadata_json, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(reference_id) DO UPDATE SET ref_type = excluded.ref_type, canonical_name = excluded.canonical_name, aliases_json = excluded.aliases_json, normalized_key = excluded.normalized_key, raw_address = excluded.raw_address, latitude = excluded.latitude, longitude = excluded.longitude, source = excluded.source, metadata_json = excluded.metadata_json, active = excluded.active, updated_at = excluded.updated_at"
@@ -221,8 +237,18 @@ async function indexReferenceEmbeddings({ db, config, records }) {
 }
 
 async function ingestReferenceData({ db, config }) {
-  const poiPath = config.referencePoiPath;
-  const streetPath = config.referenceStreetTownsPath;
+  const defaultPoiPath = path.resolve(__dirname, "..", "..", "sussexpoi.json");
+  const defaultStreetPath = path.resolve(
+    __dirname,
+    "..",
+    "..",
+    "sussexstreetstowns.json"
+  );
+  const poiPath = resolveReferencePath(config.referencePoiPath, defaultPoiPath);
+  const streetPath = resolveReferencePath(
+    config.referenceStreetTownsPath,
+    defaultStreetPath
+  );
   const poiData = loadJson(poiPath);
   const streetData = loadJson(streetPath);
 

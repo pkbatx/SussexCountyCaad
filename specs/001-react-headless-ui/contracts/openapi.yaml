@@ -1,0 +1,969 @@
+openapi: 3.0.3
+info:
+  title: SussexCountyCAAD API
+  version: 0.1.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/calls:
+    get:
+      summary: List calls
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IncidentTypeParam'
+        - $ref: '#/components/parameters/JurisdictionParam'
+        - $ref: '#/components/parameters/AgencyParam'
+        - $ref: '#/components/parameters/ServiceTypeParam'
+        - $ref: '#/components/parameters/StatusParam'
+        - $ref: '#/components/parameters/MinConfidenceParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/QueryParam'
+      responses:
+        '200':
+          description: Call list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallListResponse'
+  /api/calls/{callId}:
+    get:
+      summary: Get call detail
+      parameters:
+        - $ref: '#/components/parameters/CallIdParam'
+      responses:
+        '200':
+          description: Call detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallDetailResponse'
+        '404':
+          description: Call not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/calls/{callId}/audio:
+    get:
+      summary: Stream call audio
+      parameters:
+        - $ref: '#/components/parameters/CallIdParam'
+      responses:
+        '200':
+          description: Audio stream
+          content:
+            audio/*:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Audio not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/calls/{callId}/retry:
+    post:
+      summary: Retry a pipeline stage for a call
+      parameters:
+        - $ref: '#/components/parameters/CallIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetryStageRequest'
+      responses:
+        '200':
+          description: Stage queued or updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stage'
+        '400':
+          description: Missing stage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/incidents:
+    get:
+      summary: List incidents
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IncidentTypeParam'
+        - $ref: '#/components/parameters/JurisdictionParam'
+        - $ref: '#/components/parameters/AgencyParam'
+        - $ref: '#/components/parameters/ServiceTypeParam'
+        - $ref: '#/components/parameters/StatusParam'
+        - $ref: '#/components/parameters/MinConfidenceParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Incident list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentListResponse'
+  /api/incidents/{incidentId}:
+    get:
+      summary: Get incident detail
+      parameters:
+        - $ref: '#/components/parameters/IncidentIdParam'
+      responses:
+        '200':
+          description: Incident detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetailResponse'
+        '404':
+          description: Incident not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/agencies:
+    get:
+      summary: List agencies
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/QueryParam'
+      responses:
+        '200':
+          description: Agency list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Agency'
+  /api/notifications:
+    get:
+      summary: List notifications
+      parameters:
+        - name: subjectType
+          in: query
+          schema:
+            type: string
+        - name: subjectId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+  /api/map/points:
+    get:
+      summary: Fetch map points
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IncidentTypeParam'
+        - $ref: '#/components/parameters/JurisdictionParam'
+        - $ref: '#/components/parameters/AgencyParam'
+        - $ref: '#/components/parameters/ServiceTypeParam'
+        - $ref: '#/components/parameters/StatusParam'
+        - $ref: '#/components/parameters/MinConfidenceParam'
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [markers, heatmap]
+        - name: entity
+          in: query
+          schema:
+            type: string
+            enum: [call, incident, both]
+        - name: min_lat
+          in: query
+          schema:
+            type: number
+        - name: min_lon
+          in: query
+          schema:
+            type: number
+        - name: max_lat
+          in: query
+          schema:
+            type: number
+        - name: max_lon
+          in: query
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Map points response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapPointsResponse'
+  /api/summary:
+    get:
+      summary: Get summary metrics
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IncidentTypeParam'
+        - $ref: '#/components/parameters/JurisdictionParam'
+        - $ref: '#/components/parameters/StatusParam'
+      responses:
+        '200':
+          description: Summary metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryMetrics'
+  /api/summary/insights:
+    get:
+      summary: Get summary insights
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IncidentTypeParam'
+        - $ref: '#/components/parameters/JurisdictionParam'
+        - $ref: '#/components/parameters/StatusParam'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Summary insights
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightMetrics'
+  /api/summary/digests:
+    get:
+      summary: Get summary digests
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IncidentTypeParam'
+        - $ref: '#/components/parameters/JurisdictionParam'
+        - $ref: '#/components/parameters/StatusParam'
+      responses:
+        '200':
+          description: Digest summaries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DigestResponse'
+        '500':
+          description: Digest unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/summary/trends:
+    get:
+      summary: Get summary trends
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IncidentTypeParam'
+        - $ref: '#/components/parameters/JurisdictionParam'
+        - $ref: '#/components/parameters/StatusParam'
+        - name: bucket_minutes
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Trend buckets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+  /api/summary/hotspots:
+    get:
+      summary: Get summary hotspots
+      parameters:
+        - $ref: '#/components/parameters/StartParam'
+        - $ref: '#/components/parameters/EndParam'
+        - $ref: '#/components/parameters/IncidentTypeParam'
+        - $ref: '#/components/parameters/JurisdictionParam'
+        - $ref: '#/components/parameters/StatusParam'
+        - name: hotspot_type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Hotspots list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+  /api/events:
+    get:
+      summary: Server-sent events stream
+      responses:
+        '200':
+          description: EventSource stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /api/feedback/calls/{callId}:
+    get:
+      summary: List call feedback
+      parameters:
+        - $ref: '#/components/parameters/CallIdParam'
+      responses:
+        '200':
+          description: Feedback list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedbackEntry'
+    post:
+      summary: Submit call feedback
+      parameters:
+        - $ref: '#/components/parameters/CallIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '202':
+          description: Feedback accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackEntry'
+        '400':
+          description: Feedback type required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/feedback/incidents/{incidentId}:
+    get:
+      summary: List incident feedback
+      parameters:
+        - $ref: '#/components/parameters/IncidentIdParam'
+      responses:
+        '200':
+          description: Feedback list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedbackEntry'
+    post:
+      summary: Submit incident feedback
+      parameters:
+        - $ref: '#/components/parameters/IncidentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '202':
+          description: Feedback accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackEntry'
+        '400':
+          description: Feedback type required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  parameters:
+    CallIdParam:
+      name: callId
+      in: path
+      required: true
+      schema:
+        type: string
+    IncidentIdParam:
+      name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+    StartParam:
+      name: start
+      in: query
+      schema:
+        type: string
+        format: date-time
+    EndParam:
+      name: end
+      in: query
+      schema:
+        type: string
+        format: date-time
+    IncidentTypeParam:
+      name: incident_type
+      in: query
+      schema:
+        type: string
+    JurisdictionParam:
+      name: jurisdiction
+      in: query
+      schema:
+        type: string
+    AgencyParam:
+      name: agency
+      in: query
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    ServiceTypeParam:
+      name: service_type
+      in: query
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    StatusParam:
+      name: status
+      in: query
+      schema:
+        type: string
+    MinConfidenceParam:
+      name: min_confidence
+      in: query
+      schema:
+        type: number
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+    OffsetParam:
+      name: offset
+      in: query
+      schema:
+        type: integer
+    CursorParam:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    QueryParam:
+      name: q
+      in: query
+      schema:
+        type: string
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+    CallListItem:
+      type: object
+      properties:
+        call_id:
+          type: string
+        status:
+          type: string
+        first_seen_at:
+          type: string
+          format: date-time
+        agency:
+          type: string
+          nullable: true
+        service_type:
+          type: string
+          nullable: true
+        incident_type:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        town:
+          type: string
+          nullable: true
+        cross_street:
+          type: string
+          nullable: true
+        poi:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        re_alert:
+          type: integer
+        incident_linked:
+          type: boolean
+    CallListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CallListItem'
+        total:
+          type: integer
+    OperatorFields:
+      type: object
+      properties:
+        agency:
+          type: string
+          nullable: true
+        incident_type:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        town:
+          type: string
+          nullable: true
+        cross_street:
+          type: string
+          nullable: true
+        poi:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+    Stage:
+      type: object
+      properties:
+        stage_name:
+          type: string
+        status:
+          type: string
+    Transcript:
+      type: object
+      properties:
+        transcript_id:
+          type: string
+        text:
+          type: string
+        language:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    Summary:
+      type: object
+      properties:
+        summary_id:
+          type: string
+        summary_text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+    AudioRef:
+      type: object
+      nullable: true
+      properties:
+        url:
+          type: string
+        format:
+          type: string
+          nullable: true
+    CallDetailResponse:
+      type: object
+      properties:
+        call:
+          $ref: '#/components/schemas/CallListItem'
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Stage'
+        transcripts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transcript'
+        summaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/Summary'
+        operator_fields:
+          $ref: '#/components/schemas/OperatorFields'
+        audio:
+          $ref: '#/components/schemas/AudioRef'
+        locations:
+          type: array
+          items:
+            type: object
+        notifications:
+          type: array
+          items:
+            type: object
+        incidents:
+          type: array
+          items:
+            type: object
+    RetryStageRequest:
+      type: object
+      properties:
+        stage:
+          type: string
+      required:
+        - stage
+    IncidentListItem:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        agency:
+          type: string
+          nullable: true
+        agencies:
+          type: array
+          items:
+            type: string
+        incident_type:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        town:
+          type: string
+          nullable: true
+        cross_street:
+          type: string
+          nullable: true
+        poi:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        member_count:
+          type: integer
+        re_alert_count:
+          type: integer
+        latest_summary:
+          type: string
+          nullable: true
+        last_rollup_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+    IncidentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentListItem'
+        total:
+          type: integer
+    IncidentMember:
+      type: object
+      properties:
+        call_id:
+          type: string
+        link_reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+    IncidentMemberCall:
+      type: object
+      properties:
+        call_id:
+          type: string
+        status:
+          type: string
+        first_seen_at:
+          type: string
+          format: date-time
+        agency:
+          type: string
+          nullable: true
+        service_type:
+          type: string
+          nullable: true
+    Rollup:
+      type: object
+      properties:
+        rollup_id:
+          type: string
+        incident_id:
+          type: string
+        version:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        summary_text:
+          type: string
+        latest_update:
+          type: array
+          items:
+            type: object
+        key_fields:
+          type: object
+    IncidentDetailResponse:
+      type: object
+      properties:
+        incident:
+          $ref: '#/components/schemas/IncidentListItem'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentMember'
+        member_calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentMemberCall'
+        summaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/Summary'
+        rollups:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rollup'
+        operator_fields:
+          $ref: '#/components/schemas/OperatorFields'
+        notifications:
+          type: array
+          items:
+            type: object
+    Agency:
+      type: object
+      properties:
+        agency_id:
+          type: string
+        canonical_name:
+          type: string
+        service_type:
+          type: string
+          nullable: true
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        call_count:
+          type: integer
+        re_alert_count:
+          type: integer
+    Notification:
+      type: object
+      properties:
+        notification_id:
+          type: string
+        subject_type:
+          type: string
+        subject_id:
+          type: string
+        channel:
+          type: string
+        routing_rule:
+          type: string
+          nullable: true
+        dedupe_key:
+          type: string
+        status:
+          type: string
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_detail:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    NotificationListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        total:
+          type: integer
+    MapPoint:
+      type: object
+      properties:
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        weight:
+          type: number
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          nullable: true
+    MapPointsResponse:
+      type: object
+      properties:
+        mode:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/MapPoint'
+        truncated:
+          type: boolean
+    SummaryMetrics:
+      type: object
+      properties:
+        total_calls:
+          type: integer
+        active_incidents:
+          type: integer
+        high_priority_calls:
+          type: integer
+        re_alert_calls:
+          type: integer
+    InsightMetricItem:
+      type: object
+      properties:
+        group_key:
+          type: string
+          nullable: true
+        label:
+          type: string
+          nullable: true
+        value:
+          type: integer
+          nullable: true
+        count:
+          type: integer
+          nullable: true
+    InsightMetrics:
+      type: object
+      properties:
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        metrics:
+          type: object
+          properties:
+            agency_calls:
+              type: array
+              items:
+                $ref: '#/components/schemas/InsightMetricItem'
+            agency_re_alerts:
+              type: array
+              items:
+                $ref: '#/components/schemas/InsightMetricItem'
+            town_calls:
+              type: array
+              items:
+                $ref: '#/components/schemas/InsightMetricItem'
+    Digest:
+      type: object
+      properties:
+        window_label:
+          type: string
+        summary_text:
+          type: string
+          nullable: true
+        summary_json:
+          type: string
+          nullable: true
+    DigestResponse:
+      type: object
+      properties:
+        digests:
+          type: array
+          items:
+            $ref: '#/components/schemas/Digest'
+    FeedbackRequest:
+      type: object
+      properties:
+        feedback_type:
+          type: string
+        message:
+          type: string
+          nullable: true
+        correction:
+          type: string
+          nullable: true
+      required:
+        - feedback_type
+    FeedbackEntry:
+      type: object
+      properties:
+        feedback_id:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: string
+        feedback_type:
+          type: string
+        submitted_at:
+          type: string
+          format: date-time
+        apply_status:
+          type: string

@@ -114,11 +114,28 @@ async function summarizeDigest({ config, prompt }) {
   });
 }
 
+async function summarizeTranscriptDigest({ config, prompt }) {
+  return requestJsonCompletion({
+    config,
+    systemPrompt:
+      "You generate concise operational digest lines grounded in radio transcripts. Respond with strict JSON only as {\"lines\": [\"Agency — dispatch summary\"]}. Use only details explicitly present in transcript snippets or provided fields.",
+    userPrompt:
+      `Input JSON:\n${prompt}\n\nRules:\n` +
+      "- Each line must be grounded in the provided transcript snippets.\n" +
+      "- Do not invent towns, addresses, or incident types.\n" +
+      "- Keep lines short and operational; prefer dispatch phrasing.\n" +
+      "- If a field like agency, town, or address is present, you may include it.\n" +
+      "- Return at most max_lines.\n" +
+      "- Output JSON only with key \"lines\"."
+  });
+}
+
 module.exports = {
   transcribe,
   extractMetadata,
   groupIncident,
   summarizeDigest,
+  summarizeTranscriptDigest,
   async embedTexts({ config, input, model }) {
     if (!config.openaiApiKey) {
       throw new Error("OPENAI_API_KEY is required for embeddings");

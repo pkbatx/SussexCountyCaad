@@ -19,3 +19,7 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# Local agent prompts
+.specify/
+.codex/
