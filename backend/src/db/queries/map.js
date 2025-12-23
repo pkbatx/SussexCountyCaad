@@ -37,7 +37,16 @@ function computeWeight(timestamp, windowStart, windowEnd) {
 
 function listCallMapPoints(
   db,
-  { start, end, minConfidence, incidentType, jurisdiction, status } = {}
+  {
+    start,
+    end,
+    minConfidence,
+    incidentType,
+    jurisdiction,
+    status,
+    agency,
+    serviceType
+  } = {}
 ) {
   const clauses = [];
   const params = [];
@@ -60,6 +69,44 @@ function listCallMapPoints(
   if (jurisdiction) {
     clauses.push("json_extract(meta.payload_json, '$.jurisdiction') = ?");
     params.push(jurisdiction);
+  }
+  if (agency) {
+    const agencies = Array.isArray(agency) ? agency : [agency];
+    const normalized = agencies.map((value) => String(value).trim()).filter(Boolean);
+    const unknownRequested = normalized.some(
+      (value) => value.toLowerCase() === "unknown"
+    );
+    const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+    const parts = [];
+    if (named.length) {
+      parts.push(`calls.agency_name IN (${named.map(() => "?").join(", ")})`);
+      params.push(...named);
+    }
+    if (unknownRequested) {
+      parts.push("(calls.agency_name IS NULL OR calls.agency_name = '')");
+    }
+    if (parts.length) {
+      clauses.push(`(${parts.join(" OR ")})`);
+    }
+  }
+  if (serviceType) {
+    const types = Array.isArray(serviceType) ? serviceType : [serviceType];
+    const normalized = types.map((value) => String(value).trim()).filter(Boolean);
+    const unknownRequested = normalized.some(
+      (value) => value.toLowerCase() === "unknown"
+    );
+    const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+    const parts = [];
+    if (named.length) {
+      parts.push(`calls.service_type IN (${named.map(() => "?").join(", ")})`);
+      params.push(...named);
+    }
+    if (unknownRequested) {
+      parts.push("(calls.service_type IS NULL OR calls.service_type = '')");
+    }
+    if (parts.length) {
+      clauses.push(`(${parts.join(" OR ")})`);
+    }
   }
   if (typeof minConfidence === "number") {
     clauses.push("COALESCE(gd.confidence, 0) >= ?");
@@ -91,7 +138,16 @@ function listCallMapPoints(
 
 function listIncidentMapPoints(
   db,
-  { start, end, minConfidence, incidentType, jurisdiction, status } = {}
+  {
+    start,
+    end,
+    minConfidence,
+    incidentType,
+    jurisdiction,
+    status,
+    agency,
+    serviceType
+  } = {}
 ) {
   const clauses = [];
   const params = [];
@@ -114,6 +170,56 @@ function listIncidentMapPoints(
   if (status && status !== "any") {
     clauses.push("json_extract(rollups.key_fields_json, '$.status') = ?");
     params.push(status);
+  }
+  if (agency) {
+    const agencies = Array.isArray(agency) ? agency : [agency];
+    const normalized = agencies.map((value) => String(value).trim()).filter(Boolean);
+    const unknownRequested = normalized.some(
+      (value) => value.toLowerCase() === "unknown"
+    );
+    const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+    const parts = [];
+    if (named.length) {
+      parts.push(
+        `json_extract(rollups.key_fields_json, '$.agency') IN (${named
+          .map(() => "?")
+          .join(", ")})`
+      );
+      params.push(...named);
+    }
+    if (unknownRequested) {
+      parts.push(
+        "(json_extract(rollups.key_fields_json, '$.agency') IS NULL OR json_extract(rollups.key_fields_json, '$.agency') = '')"
+      );
+    }
+    if (parts.length) {
+      clauses.push(`(${parts.join(" OR ")})`);
+    }
+  }
+  if (serviceType) {
+    const types = Array.isArray(serviceType) ? serviceType : [serviceType];
+    const normalized = types.map((value) => String(value).trim()).filter(Boolean);
+    const unknownRequested = normalized.some(
+      (value) => value.toLowerCase() === "unknown"
+    );
+    const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+    const parts = [];
+    if (named.length) {
+      parts.push(
+        `EXISTS (SELECT 1 FROM incident_agency_stats ias JOIN agency_registry ar ON ar.agency_id = ias.agency_id WHERE ias.incident_id = incident_groups.incident_id AND ar.service_type IN (${named
+          .map(() => "?")
+          .join(", ")}))`
+      );
+      params.push(...named);
+    }
+    if (unknownRequested) {
+      parts.push(
+        "NOT EXISTS (SELECT 1 FROM incident_agency_stats ias JOIN agency_registry ar ON ar.agency_id = ias.agency_id WHERE ias.incident_id = incident_groups.incident_id AND ar.service_type IS NOT NULL AND ar.service_type != '')"
+      );
+    }
+    if (parts.length) {
+      clauses.push(`(${parts.join(" OR ")})`);
+    }
   }
   if (typeof minConfidence === "number") {
     clauses.push("COALESCE(incident_groups.group_confidence, 0) >= ?");
@@ -152,6 +258,8 @@ function listMapPoints(
     incidentType,
     jurisdiction,
     status,
+    agency,
+    serviceType,
     bounds
   } = {}
 ) {
@@ -164,7 +272,9 @@ function listMapPoints(
         minConfidence,
         incidentType,
         jurisdiction,
-        status
+        status,
+        agency,
+        serviceType
       })
     );
   }
@@ -176,7 +286,9 @@ function listMapPoints(
         minConfidence,
         incidentType,
         jurisdiction,
-        status
+        status,
+        agency,
+        serviceType
       })
     );
   }

@@ -34,7 +34,8 @@ function listIncidents(
     jurisdiction,
     status,
     minConfidence,
-    agency
+    agency,
+    serviceType
   } = {}
 ) {
   const clauses = [];
@@ -56,13 +57,49 @@ function listIncidents(
     params.push(jurisdiction);
   }
   if (agency) {
-    if (String(agency).toLowerCase() === "unknown") {
-      clauses.push(
+    const agencies = Array.isArray(agency) ? agency : [agency];
+    const normalized = agencies.map((value) => String(value).trim()).filter(Boolean);
+    const unknownRequested = normalized.some(
+      (value) => value.toLowerCase() === "unknown"
+    );
+    const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+    const parts = [];
+    if (named.length) {
+      parts.push(
+        `json_extract(rollups.key_fields_json, '$.agency') IN (${named
+          .map(() => "?")
+          .join(", ")})`
+      );
+      params.push(...named);
+    }
+    if (unknownRequested) {
+      parts.push(
         "(json_extract(rollups.key_fields_json, '$.agency') IS NULL OR json_extract(rollups.key_fields_json, '$.agency') = '')"
       );
-    } else {
-      clauses.push("json_extract(rollups.key_fields_json, '$.agency') = ?");
-      params.push(agency);
+    }
+    if (parts.length) {
+      clauses.push(`(${parts.join(" OR ")})`);
+    }
+  }
+  if (serviceType) {
+    const types = Array.isArray(serviceType) ? serviceType : [serviceType];
+    const normalized = types.map((value) => String(value).trim()).filter(Boolean);
+    const unknownRequested = normalized.some(
+      (value) => value.toLowerCase() === "unknown"
+    );
+    const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+    const parts = [];
+    if (named.length) {
+      parts.push(`agency_registry.service_type IN (${named.map(() => "?").join(", ")})`);
+      params.push(...named);
+    }
+    if (unknownRequested) {
+      parts.push(
+        "(agency_registry.service_type IS NULL OR agency_registry.service_type = '')"
+      );
+    }
+    if (parts.length) {
+      clauses.push(`(${parts.join(" OR ")})`);
     }
   }
   if (status && status !== "any") {
@@ -76,13 +113,13 @@ function listIncidents(
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const items = db
     .prepare(
-      "SELECT incident_groups.*, rollups.summary_text as latest_summary, rollups.created_at as last_rollup_at, rollups.version as latest_rollup_version, json_extract(rollups.key_fields_json, '$.agency') as agency, json_extract(rollups.key_fields_json, '$.incident_type') as incident_type, json_extract(rollups.key_fields_json, '$.address') as address, json_extract(rollups.key_fields_json, '$.town') as town, json_extract(rollups.key_fields_json, '$.cross_street') as cross_street, json_extract(rollups.key_fields_json, '$.poi') as poi, json_extract(rollups.key_fields_json, '$.jurisdiction') as jurisdiction, json_extract(rollups.key_fields_json, '$.status') as status, COUNT(incident_group_members.call_id) as member_count FROM incident_groups LEFT JOIN incident_group_members ON incident_groups.incident_id = incident_group_members.incident_id LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) " +
+      "SELECT incident_groups.*, rollups.summary_text as latest_summary, rollups.created_at as last_rollup_at, rollups.version as latest_rollup_version, json_extract(rollups.key_fields_json, '$.agency') as agency, json_extract(rollups.key_fields_json, '$.incident_type') as incident_type, json_extract(rollups.key_fields_json, '$.address') as address, json_extract(rollups.key_fields_json, '$.town') as town, json_extract(rollups.key_fields_json, '$.cross_street') as cross_street, json_extract(rollups.key_fields_json, '$.poi') as poi, json_extract(rollups.key_fields_json, '$.jurisdiction') as jurisdiction, json_extract(rollups.key_fields_json, '$.status') as status, GROUP_CONCAT(DISTINCT agency_registry.canonical_name) as agency_list, COALESCE(incident_groups.call_count, COUNT(DISTINCT incident_group_members.call_id)) as member_count, incident_groups.re_alert_count as re_alert_count FROM incident_groups LEFT JOIN incident_group_members ON incident_groups.incident_id = incident_group_members.incident_id LEFT JOIN incident_agency_stats ON incident_agency_stats.incident_id = incident_groups.incident_id LEFT JOIN agency_registry ON agency_registry.agency_id = incident_agency_stats.agency_id LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) " +
         `${where} GROUP BY incident_groups.incident_id ORDER BY COALESCE(rollups.created_at, incident_groups.updated_at) DESC LIMIT ? OFFSET ?`
     )
     .all(...params, limit, offset);
   const total = db
     .prepare(
-      "SELECT COUNT(1) as count FROM incident_groups LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) " +
+      "SELECT COUNT(DISTINCT incident_groups.incident_id) as count FROM incident_groups LEFT JOIN incident_rollups rollups ON rollups.incident_id = incident_groups.incident_id AND rollups.version = (SELECT MAX(version) FROM incident_rollups WHERE incident_id = incident_groups.incident_id) LEFT JOIN incident_agency_stats ON incident_agency_stats.incident_id = incident_groups.incident_id LEFT JOIN agency_registry ON agency_registry.agency_id = incident_agency_stats.agency_id " +
         where
     )
     .get(...params).count;

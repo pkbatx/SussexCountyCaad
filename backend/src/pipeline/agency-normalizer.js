@@ -165,7 +165,7 @@ function toTitleCase(word) {
     .join("-");
 }
 
-function detectServiceType(tokens) {
+function detectServiceToken(tokens) {
   const normalized = tokens.map(normalizeToken);
   const tokenSet = new Set(normalized);
   if (tokenSet.has("fm") || (tokenSet.has("fire") && tokenSet.has("marshal"))) {
@@ -176,6 +176,19 @@ function detectServiceType(tokens) {
   }
   if (normalized.some((token) => SERVICE_TOKEN_MAP.get(token) === "EMS")) {
     return "EMS";
+  }
+  return null;
+}
+
+function normalizeServiceType(serviceToken) {
+  if (serviceToken === "EMS") {
+    return "EMS";
+  }
+  if (serviceToken === "FD") {
+    return "Fire";
+  }
+  if (serviceToken === "FM") {
+    return "Special";
   }
   return null;
 }
@@ -200,7 +213,7 @@ function stripServiceTokens(tokens) {
   });
 }
 
-function buildCanonicalName(tokens, serviceType) {
+function buildCanonicalName(tokens, serviceToken) {
   const nameParts = tokens.map((token) => {
     const normalized = normalizeToken(token);
     if (normalized === "fd" || normalized === "ems" || normalized === "fm") {
@@ -212,13 +225,13 @@ function buildCanonicalName(tokens, serviceType) {
   if (!base) {
     return null;
   }
-  if (!serviceType) {
+  if (!serviceToken) {
     return base;
   }
-  if (base.toUpperCase().endsWith(serviceType)) {
+  if (base.toUpperCase().endsWith(serviceToken)) {
     return base;
   }
-  return `${base} ${serviceType}`.trim();
+  return `${base} ${serviceToken}`.trim();
 }
 
 function matchKnownAgency(candidate) {
@@ -246,10 +259,11 @@ function normalizeAgency({ sourcePath, filenameHints } = {}) {
     Boolean
   );
   const cleaned = stripNoise(rawTokens);
-  const serviceType = detectServiceType(cleaned);
+  const serviceToken = detectServiceToken(cleaned);
+  const serviceType = normalizeServiceType(serviceToken);
   const nameTokens = stripServiceTokens(cleaned);
   const baseCandidate = buildCanonicalName(nameTokens, null);
-  const candidate = buildCanonicalName(nameTokens, serviceType);
+  const candidate = buildCanonicalName(nameTokens, serviceToken);
   const canonicalName =
     matchKnownAgency(candidate) ||
     matchKnownAgency(baseCandidate) ||

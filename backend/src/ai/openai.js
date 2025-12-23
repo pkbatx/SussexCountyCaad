@@ -105,10 +105,20 @@ async function groupIncident({ config, prompt }) {
   });
 }
 
+async function summarizeDigest({ config, prompt }) {
+  return requestJsonCompletion({
+    config,
+    systemPrompt:
+      "You generate concise operational digest lines from provided counts. Respond with strict JSON only as {\"lines\": [\"Town — Fire 3, EMS 2 (Agency 2, Other 1)\"]}. Use only provided data and omit zero-count categories.",
+    userPrompt: `Input JSON:\n${prompt}\n\nRules:\n- Use only towns and counts provided.\n- Format each line as \"Town — Fire X, EMS Y, Special Z\".\n- If agency_breakdown is provided for a town, append \"(Agency A N, Agency B M)\" after the service counts.\n- Omit categories with 0 counts.\n- Return at most max_lines.\n- Output JSON only with key \"lines\".`
+  });
+}
+
 module.exports = {
   transcribe,
   extractMetadata,
   groupIncident,
+  summarizeDigest,
   async embedTexts({ config, input, model }) {
     if (!config.openaiApiKey) {
       throw new Error("OPENAI_API_KEY is required for embeddings");

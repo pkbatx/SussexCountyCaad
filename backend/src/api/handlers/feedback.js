@@ -1,4 +1,49 @@
 const { createFeedbackSignal, listFeedbackSignals } = require("../../db/queries/feedback");
+const { listIncidentMembers } = require("../../db/queries/incidents");
+
+const FEEDBACK_STAGE_MAP = {
+  bad_transcript: [
+    "transcription",
+    "summary",
+    "extraction",
+    "geo",
+    "grouping",
+    "incidentSummary"
+  ],
+  wrong_location: ["extraction", "geo", "grouping", "incidentSummary"],
+  wrong_grouping: ["grouping", "incidentSummary"],
+  wrong_type: ["extraction", "grouping", "incidentSummary"],
+  wrong_agency: ["extraction", "grouping", "incidentSummary"],
+  wrong_address: ["extraction", "geo", "grouping", "incidentSummary"],
+  wrong_town: ["extraction", "geo", "grouping", "incidentSummary"],
+  wrong_cross_street: ["extraction", "geo", "grouping", "incidentSummary"],
+  wrong_poi: ["extraction", "geo", "grouping", "incidentSummary"]
+};
+
+function resolveStages(feedbackType) {
+  if (feedbackType && feedbackType.startsWith("confirm_")) {
+    return [];
+  }
+  return FEEDBACK_STAGE_MAP[feedbackType] || ["extraction", "grouping", "incidentSummary"];
+}
+
+function enqueueStages(pipeline, callId, stages) {
+  if (!pipeline?.enqueue || !callId || !stages?.length) {
+    return;
+  }
+  stages.forEach((stage) => pipeline.enqueue(callId, stage));
+}
+
+function listCallIdsForIncident(db, incidentId) {
+  const members = listIncidentMembers(db, incidentId);
+  const unique = new Set();
+  members.forEach((member) => {
+    if (member.call_id) {
+      unique.add(member.call_id);
+    }
+  });
+  return Array.from(unique);
+}
 
 function sendJson(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -36,12 +81,13 @@ function normalizeFeedbackRow(row, targetType, targetId) {
   };
 }
 
-async function submitCallFeedbackHandler(req, res, { db, callId }) {
+async function submitCallFeedbackHandler(req, res, { db, callId, pipeline }) {
   const body = await readJsonBody(req);
   if (!body.feedback_type) {
     return sendJson(res, 400, { error: "feedback_type_required" });
   }
   const createdAt = new Date().toISOString();
+  const stages = resolveStages(body.feedback_type);
   const feedbackId = createFeedbackSignal(db, {
     callId,
     signalType: body.feedback_type,
@@ -51,8 +97,10 @@ async function submitCallFeedbackHandler(req, res, { db, callId }) {
       source: "ui",
       submitted_at: createdAt
     },
-    adjustment: { apply_status: "queued" }
+    adjustment: { apply_status: "queued", queued_stages: stages }
   });
+
+  enqueueStages(pipeline, callId, stages);
 
   sendJson(res, 202, {
     feedback_id: feedbackId,
@@ -64,12 +112,13 @@ async function submitCallFeedbackHandler(req, res, { db, callId }) {
   });
 }
 
-async function submitIncidentFeedbackHandler(req, res, { db, incidentId }) {
+async function submitIncidentFeedbackHandler(req, res, { db, incidentId, pipeline }) {
   const body = await readJsonBody(req);
   if (!body.feedback_type) {
     return sendJson(res, 400, { error: "feedback_type_required" });
   }
   const createdAt = new Date().toISOString();
+  const stages = resolveStages(body.feedback_type);
   const feedbackId = createFeedbackSignal(db, {
     incidentId,
     signalType: body.feedback_type,
@@ -79,8 +128,11 @@ async function submitIncidentFeedbackHandler(req, res, { db, incidentId }) {
       source: "ui",
       submitted_at: createdAt
     },
-    adjustment: { apply_status: "queued" }
+    adjustment: { apply_status: "queued", queued_stages: stages }
   });
+
+  const callIds = listCallIdsForIncident(db, incidentId);
+  callIds.forEach((callId) => enqueueStages(pipeline, callId, stages));
 
   sendJson(res, 202, {
     feedback_id: feedbackId,

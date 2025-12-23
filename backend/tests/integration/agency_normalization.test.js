@@ -36,5 +36,5 @@ test("collapses combined dispatch entity to canonical name", () => {
   });
 
   assert.equal(result.agency, "Andover Twp / Andover Boro FD");
-  assert.equal(result.serviceType, "FD");
+  assert.equal(result.serviceType, "Fire");
 });

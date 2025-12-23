@@ -1,12 +1,29 @@
 import { listCalls } from "../api";
 
 function formatTimestamp(value) {
-  if (!value) return "Unknown time";
+  if (!value) return { text: "Unknown time", title: "" };
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return { text: value, title: "" };
+  const diffSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  let text = "Just now";
+  if (diffSeconds >= 60) {
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    if (diffMinutes < 60) {
+      text = `${diffMinutes}m ago`;
+    } else {
+      const diffHours = Math.floor(diffMinutes / 60);
+      if (diffHours < 24) {
+        text = `${diffHours}h ago`;
+      } else {
+        const diffDays = Math.floor(diffHours / 24);
+        text = `${diffDays}d ago`;
+      }
+    }
+  }
+  return { text, title: date.toLocaleString() };
 }
 
-export async function renderCallsView({ onSelect, filters }) {
+export async function renderCallsView({ onSelect, onPlay, filters }) {
   const container = document.createElement("div");
   container.className = "calls-view";
 
@@ -31,26 +48,50 @@ export async function renderCallsView({ onSelect, filters }) {
   const appendItems = (items) => {
     items.forEach((call) => {
       const item = document.createElement("li");
-      item.className = "call-item";
-      const statusValue = call.status || "unknown";
+      item.className = "cad-card";
+      const statusValue = (() => {
+        if (call.status === "processing" || call.status === "pending") {
+          return "active";
+        }
+        return call.status || "unknown";
+      })();
       const agency = call.agency || "Unknown";
+      const serviceType = call.service_type ? ` · ${call.service_type}` : "";
       const location = call.address || call.town || "Location unknown";
       const metaLine = [agency, call.incident_type]
         .filter(Boolean)
         .join(" · ");
+      const incidentLabel = call.incident_linked ? "Linked to incident" : "Unlinked";
+      const timestamp = formatTimestamp(call.first_seen_at || call.created_at);
+      const serviceClass = call.service_type
+        ? call.service_type.toLowerCase()
+        : "unknown";
+      item.dataset.service = serviceClass;
+      const typeBadge = call.service_type
+        ? `<span class="type-pill type-${serviceClass}">${call.service_type}</span>`
+        : "";
       item.innerHTML = `
-        <div class="call-meta">
-          <div class="call-id">${call.call_id || call.callId}</div>
-          <div class="call-path">${location}</div>
-          <div class="incident-meta">${metaLine || "No classification yet"}</div>
-          <div class="incident-updated">${formatTimestamp(
-            call.first_seen_at || call.created_at
-          )}</div>
+        <div class="cad-card-main">
+          <div class="cad-card-title">${location}</div>
+          <div class="cad-card-meta">${metaLine || "Unspecified"} ${typeBadge}</div>
+          <div class="cad-card-meta">${agency}${serviceType}</div>
+          <div class="cad-card-meta">${incidentLabel}</div>
+          <div class="incident-updated" title="${timestamp.title}">${timestamp.text}</div>
         </div>
-        <div class="call-status">
+        <div class="cad-card-status">
           <span class="status-badge status-${statusValue}">${statusValue}</span>
+          <button class="button small call-play">Play</button>
         </div>
       `;
+      const playButton = item.querySelector(".call-play");
+      if (onPlay) {
+        playButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          onPlay(call.call_id || call.callId);
+        });
+      } else {
+        playButton.disabled = true;
+      }
       item.addEventListener("click", () => onSelect(call.call_id || call.callId));
       list.appendChild(item);
     });

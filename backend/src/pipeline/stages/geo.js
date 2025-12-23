@@ -161,9 +161,9 @@ async function runStage({ config, db, callId }) {
     return;
   }
 
+  let query = null;
   try {
     let geocode = null;
-    let query = null;
     for (const candidate of queries) {
       const result = await geocodeMapbox({ config, query: candidate });
       const top = result.response?.features?.[0] || null;

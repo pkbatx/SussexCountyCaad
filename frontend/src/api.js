@@ -43,8 +43,13 @@ export function getIncidentDetail(incidentId) {
   return fetchJson(`/api/incidents/${incidentId}`);
 }
 
-export function listAgencies() {
-  return fetchJson("/api/agencies");
+export function listAgencies({ filters, q } = {}) {
+  const params = new URLSearchParams();
+  if (filters?.start) params.set("start", filters.start);
+  if (filters?.end) params.set("end", filters.end);
+  if (q) params.set("q", q);
+  const query = params.toString();
+  return fetchJson(query ? `/api/agencies?${query}` : "/api/agencies");
 }
 
 export function listNotifications() {
@@ -74,6 +79,18 @@ export function fetchHotspots({ filters, hotspotType = "any", limit = 10 } = {})
   params.set("hotspot_type", hotspotType);
   params.set("limit", String(limit));
   return fetchJson(`/api/summary/hotspots?${params.toString()}`);
+}
+
+export function fetchInsights({ filters, limit = 10 } = {}) {
+  const params = serializeFilters(filters || {});
+  params.set("limit", String(limit));
+  return fetchJson(`/api/summary/insights?${params.toString()}`);
+}
+
+export function fetchDigestSummaries({ filters } = {}) {
+  const params = serializeFilters(filters || {});
+  const query = params.toString();
+  return fetchJson(query ? `/api/summary/digests?${query}` : "/api/summary/digests");
 }
 
 export function submitCallFeedback(callId, payload) {

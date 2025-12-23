@@ -1,6 +1,12 @@
 import { getCallDetail, retryStage, submitCallFeedback, listCallFeedback } from "../api";
 
-export async function renderCallDetailView({ callId, onBack, prefetched }) {
+export async function renderCallDetailView({
+  callId,
+  onBack,
+  prefetched,
+  audioController,
+  onFeedback
+}) {
   const container = document.createElement("div");
   container.className = "call-detail";
 
@@ -28,11 +34,28 @@ export async function renderCallDetailView({ callId, onBack, prefetched }) {
   const crossLabel = operator.cross_street || "";
   const poiLabel = operator.poi || "";
   header.innerHTML = `
-    <div class="detail-id">${data.call.call_id || data.call.callId}</div>
-    <div class="detail-path">${data.call.source_path || data.call.sourcePath}</div>
+    <div class="detail-title">Call Detail</div>
     <div class="incident-meta">${agencyLabel} · ${typeLabel}</div>
     <div class="incident-meta">${[addressLabel, townLabel].filter(Boolean).join(" · ")}</div>
   `;
+
+  const audioSection = document.createElement("div");
+  audioSection.className = "detail-section";
+  audioSection.innerHTML = "<h2>Audio</h2>";
+  const audioRow = document.createElement("div");
+  audioRow.className = "audio-row";
+  const playButton = document.createElement("button");
+  playButton.className = "button";
+  playButton.textContent = data.audio?.url ? "Play audio" : "Audio unavailable";
+  playButton.disabled = !data.audio?.url;
+  playButton.addEventListener("click", () => {
+    audioController?.setSource({
+      src: data.audio?.url,
+      label: `${agencyLabel} · ${typeLabel}`
+    });
+  });
+  audioRow.appendChild(playButton);
+  audioSection.appendChild(audioRow);
 
   const stages = document.createElement("div");
   stages.className = "detail-section";
@@ -70,57 +93,80 @@ export async function renderCallDetailView({ callId, onBack, prefetched }) {
   const summaryText = operator.summary || data.summaries[0]?.summary_text || "No summary yet.";
   summaries.appendChild(document.createTextNode(summaryText));
 
+  const feedbackFields = [
+    { label: "Agency", value: agencyLabel, type: "wrong_agency", confirm: "confirm_agency" },
+    { label: "Incident type", value: typeLabel, type: "wrong_type", confirm: "confirm_type" },
+    { label: "Address", value: addressLabel, type: "wrong_address", confirm: "confirm_address" },
+    { label: "Town", value: townLabel || "Unknown", type: "wrong_town", confirm: "confirm_town" },
+    {
+      label: "Cross street",
+      value: crossLabel || "None",
+      type: "wrong_cross_street",
+      confirm: "confirm_cross_street"
+    },
+    { label: "POI", value: poiLabel || "None", type: "wrong_poi", confirm: "confirm_poi" }
+  ];
+
   const details = document.createElement("div");
   details.className = "detail-section";
   details.innerHTML = "<h2>Details</h2>";
-  const detailList = document.createElement("ul");
-  detailList.className = "evidence-list";
-  const detailRows = [
-    ["Agency", agencyLabel],
-    ["Incident type", typeLabel],
-    ["Address", addressLabel],
-    ["Town", townLabel || "Unknown"],
-    ["Cross street", crossLabel || "None"],
-    ["POI", poiLabel || "None"]
-  ];
-  detailRows.forEach(([label, value]) => {
+  const fieldList = document.createElement("ul");
+  fieldList.className = "detail-table";
+
+  const feedbackHistory = document.createElement("ul");
+  feedbackHistory.className = "evidence-list";
+
+  feedbackFields.forEach((field) => {
     const item = document.createElement("li");
-    item.className = "evidence-item";
-    item.textContent = `${label}: ${value}`;
-    detailList.appendChild(item);
-  });
-  details.appendChild(detailList);
-
-  const feedback = document.createElement("div");
-  feedback.className = "detail-section";
-  feedback.innerHTML = "<h2>Feedback</h2>";
-  const feedbackList = document.createElement("ul");
-  feedbackList.className = "evidence-list";
-
-  const feedbackActions = [
-    { label: "Bad transcript", type: "bad_transcript" },
-    { label: "Wrong location", type: "wrong_location" },
-    { label: "Wrong grouping", type: "wrong_grouping" },
-    { label: "Wrong type", type: "wrong_type" }
-  ];
-
-  const feedbackButtons = document.createElement("div");
-  feedbackButtons.className = "detail-section";
-  feedbackActions.forEach((action) => {
-    const button = document.createElement("button");
-    button.className = "button small";
-    button.textContent = action.label;
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      await submitCallFeedback(callId, { feedback_type: action.type });
-      const item = document.createElement("li");
-      item.className = "evidence-item";
-      item.textContent = `${action.label} submitted (queued)`;
-      feedbackList.prepend(item);
-      button.disabled = false;
+    item.className = "detail-row";
+    const label = document.createElement("div");
+    label.className = "detail-label";
+    label.textContent = field.label;
+    const value = document.createElement("div");
+    value.className = "detail-value";
+    value.textContent = field.value;
+    const actions = document.createElement("div");
+    actions.className = "detail-actions";
+    const up = document.createElement("button");
+    up.className = "thumb-button thumb-button--confirm";
+    up.title = "Mark correct";
+    up.textContent = "OK";
+    up.addEventListener("click", async () => {
+      up.disabled = true;
+      await submitCallFeedback(callId, { feedback_type: field.confirm });
+      const historyItem = document.createElement("li");
+      historyItem.className = "evidence-item";
+      historyItem.textContent = `${field.label} confirmed`;
+      feedbackHistory.prepend(historyItem);
+      onFeedback?.(callId);
+      up.disabled = false;
     });
-    feedbackButtons.appendChild(button);
+    const down = document.createElement("button");
+    down.className = "thumb-button thumb-button--flag";
+    down.title = "Mark incorrect";
+    down.textContent = "Flag";
+    down.addEventListener("click", async () => {
+      down.disabled = true;
+      await submitCallFeedback(callId, { feedback_type: field.type });
+      const historyItem = document.createElement("li");
+      historyItem.className = "evidence-item";
+      historyItem.textContent = `${field.label} flagged (queued)`;
+      feedbackHistory.prepend(historyItem);
+      onFeedback?.(callId);
+      down.disabled = false;
+    });
+    actions.appendChild(up);
+    actions.appendChild(down);
+    item.appendChild(label);
+    item.appendChild(value);
+    item.appendChild(actions);
+    fieldList.appendChild(item);
   });
+  details.appendChild(fieldList);
+
+  const feedbackHistorySection = document.createElement("div");
+  feedbackHistorySection.className = "detail-section";
+  feedbackHistorySection.innerHTML = "<h2>Feedback history</h2>";
 
   try {
     const existing = await listCallFeedback(callId);
@@ -128,25 +174,25 @@ export async function renderCallDetailView({ callId, onBack, prefetched }) {
       const item = document.createElement("li");
       item.className = "evidence-item";
       item.textContent = `${entry.feedback_type} • ${entry.apply_status}`;
-      feedbackList.appendChild(item);
+      feedbackHistory.appendChild(item);
     });
   } catch (_error) {
     const item = document.createElement("li");
     item.className = "evidence-item";
     item.textContent = "Feedback history unavailable.";
-    feedbackList.appendChild(item);
+    feedbackHistory.appendChild(item);
   }
 
-  feedback.appendChild(feedbackButtons);
-  feedback.appendChild(feedbackList);
+  feedbackHistorySection.appendChild(feedbackHistory);
 
   container.appendChild(back);
   container.appendChild(header);
+  container.appendChild(audioSection);
   container.appendChild(details);
   container.appendChild(stages);
   container.appendChild(transcripts);
   container.appendChild(summaries);
-  container.appendChild(feedback);
+  container.appendChild(feedbackHistorySection);
 
   return container;
 }

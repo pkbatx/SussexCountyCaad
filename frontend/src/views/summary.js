@@ -1,4 +1,4 @@
-import { fetchSummaryMetrics, fetchTrendBuckets, fetchHotspots } from "../api";
+import { fetchSummaryMetrics, fetchInsights, fetchDigestSummaries } from "../api";
 
 function createMetric(label, value) {
   const item = document.createElement("div");
@@ -14,41 +14,73 @@ function createMetric(label, value) {
   return item;
 }
 
-function renderTrendChart(buckets) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 300 80");
-  svg.setAttribute("width", "100%");
-  svg.setAttribute("height", "80");
+function renderInsightList(title, items, emptyMessage, limit = 6) {
+  const panel = document.createElement("div");
+  panel.className = "hotspot-panel";
+  const heading = document.createElement("div");
+  heading.className = "trend-title";
+  heading.textContent = title;
+  const list = document.createElement("ul");
+  list.className = "evidence-list";
+  if (items?.length) {
+    items.slice(0, limit).forEach((entry) => {
+      const item = document.createElement("li");
+      item.className = "evidence-item";
+      const label = entry.group_key || entry.label || "Unknown";
+      const count = entry.value ?? entry.count ?? 0;
+      item.textContent = `${label} • ${count}`;
+      list.appendChild(item);
+    });
+  } else {
+    const item = document.createElement("li");
+    item.className = "evidence-item";
+    item.textContent = emptyMessage;
+    list.appendChild(item);
+  }
+  panel.appendChild(heading);
+  panel.appendChild(list);
+  return panel;
+}
 
-  const max = Math.max(1, ...buckets.map((b) => b.call_count));
-  const barWidth = 300 / Math.max(buckets.length, 1);
-
-  buckets.forEach((bucket, index) => {
-    const height = (bucket.call_count / max) * 70;
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", String(index * barWidth + 2));
-    rect.setAttribute("y", String(78 - height));
-    rect.setAttribute("width", String(barWidth - 4));
-    rect.setAttribute("height", String(height));
-    rect.setAttribute("fill", "#64748b");
-    svg.appendChild(rect);
-  });
-
-  return svg;
+function renderDigestPanel({ title, lines, emptyMessage }) {
+  const panel = document.createElement("div");
+  panel.className = "digest-panel";
+  const heading = document.createElement("div");
+  heading.className = "trend-title";
+  heading.textContent = title;
+  const list = document.createElement("ul");
+  list.className = "evidence-list";
+  if (lines?.length) {
+    lines.forEach((line) => {
+      const item = document.createElement("li");
+      item.className = "evidence-item";
+      item.textContent = line;
+      list.appendChild(item);
+    });
+  } else {
+    const item = document.createElement("li");
+    item.className = "evidence-item";
+    item.textContent = emptyMessage;
+    list.appendChild(item);
+  }
+  panel.appendChild(heading);
+  panel.appendChild(list);
+  return panel;
 }
 
 export async function renderSummaryView({ filters }) {
   const container = document.createElement("div");
   container.className = "summary-container";
   let metrics = null;
-  let buckets = [];
-  let hotspots = [];
+  let insights = null;
+  let digests = [];
   let errorMessage = "";
 
   try {
     metrics = await fetchSummaryMetrics({ filters });
-    buckets = await fetchTrendBuckets({ filters, bucketMinutes: 60 });
-    hotspots = await fetchHotspots({ filters, hotspotType: "any" });
+    insights = await fetchInsights({ filters, limit: 8 });
+    const digestResponse = await fetchDigestSummaries({ filters });
+    digests = digestResponse?.digests || [];
   } catch (error) {
     errorMessage = error.message || "Summary unavailable.";
   }
@@ -57,44 +89,77 @@ export async function renderSummaryView({ filters }) {
   strip.className = "summary-strip-inner";
   strip.appendChild(createMetric("Total calls", metrics?.total_calls));
   strip.appendChild(createMetric("Active incidents", metrics?.active_incidents));
-  strip.appendChild(createMetric("High priority", metrics?.high_priority_calls));
-  strip.appendChild(createMetric("Failed stages", metrics?.failed_stages));
-  strip.appendChild(createMetric("Notifications sent", metrics?.notifications_sent));
+  strip.appendChild(createMetric("Re-alerts", metrics?.re_alert_calls));
+  const activeAgencies = insights?.metrics?.agency_calls?.length ?? 0;
+  strip.appendChild(createMetric("Active agencies", activeAgencies));
 
-  const trend = document.createElement("div");
-  trend.className = "trend-panel";
-  const trendTitle = document.createElement("div");
-  trendTitle.className = "trend-title";
-  trendTitle.textContent = "Calls over time";
-  trend.appendChild(trendTitle);
-  trend.appendChild(renderTrendChart(buckets));
+  const digestLookup = new Map(
+    digests.map((digest) => [
+      digest.window_label,
+      (() => {
+        if (digest.summary_json) {
+          try {
+            return JSON.parse(digest.summary_json)?.lines || [];
+          } catch (_error) {
+            return [];
+          }
+        }
+        return digest.summary_text ? digest.summary_text.split("\n") : [];
+      })()
+    ])
+  );
+  const digestPanel = document.createElement("div");
+  digestPanel.className = "digest-grid";
+  digestPanel.appendChild(
+    renderDigestPanel({
+      title: "Incident digest (last 24h)",
+      lines: digestLookup.get("24h"),
+      emptyMessage: errorMessage || "No digest available for the last 24 hours."
+    })
+  );
+  digestPanel.appendChild(
+    renderDigestPanel({
+      title: "Incident digest (last 7d)",
+      lines: digestLookup.get("7d"),
+      emptyMessage: "No digest available for the last 7 days."
+    })
+  );
+  digestPanel.appendChild(
+    renderDigestPanel({
+      title: "Incident digest (last 30d)",
+      lines: digestLookup.get("30d"),
+      emptyMessage: "No digest available for the last 30 days."
+    })
+  );
 
-  const hotspot = document.createElement("div");
-  hotspot.className = "hotspot-panel";
-  const hotspotTitle = document.createElement("div");
-  hotspotTitle.className = "trend-title";
-  hotspotTitle.textContent = "Top hotspots";
-  const list = document.createElement("ul");
-  list.className = "evidence-list";
-  if (hotspots.length) {
-    hotspots.forEach((entry) => {
-      const item = document.createElement("li");
-      item.className = "evidence-item";
-      item.textContent = `${entry.label} • ${entry.count}`;
-      list.appendChild(item);
-    });
-  } else {
-    const item = document.createElement("li");
-    item.className = "evidence-item";
-    item.textContent = errorMessage || "No hotspots for current filters.";
-    list.appendChild(item);
-  }
-  hotspot.appendChild(hotspotTitle);
-  hotspot.appendChild(list);
+  const insightSection = document.createElement("div");
+  insightSection.className = "insight-grid";
+  const metricsList = insights?.metrics || {};
+  insightSection.appendChild(
+    renderInsightList(
+      "Most active agencies",
+      metricsList.agency_calls,
+      errorMessage || "No agency activity for current filters."
+    )
+  );
+  insightSection.appendChild(
+    renderInsightList(
+      "Re-alert agencies",
+      metricsList.agency_re_alerts,
+      "No re-alerts in this window."
+    )
+  );
+  insightSection.appendChild(
+    renderInsightList(
+      "Active towns",
+      metricsList.town_calls,
+      errorMessage || "No towns for current filters."
+    )
+  );
 
   container.appendChild(strip);
-  container.appendChild(trend);
-  container.appendChild(hotspot);
+  container.appendChild(digestPanel);
+  container.appendChild(insightSection);
 
   if (errorMessage) {
     const error = document.createElement("div");

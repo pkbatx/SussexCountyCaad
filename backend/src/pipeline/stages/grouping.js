@@ -11,10 +11,12 @@ const {
   getIncidentById,
   listCandidateIncidents
 } = require("../../db/queries/incidents");
+const { getCallById } = require("../../db/queries/calls");
 const { createGroupingDecision } = require("../../db/queries/grouping_decisions");
 const { createAIInvocation } = require("../../db/queries/ai_invocations");
 const { listFeedbackSignals } = require("../../db/queries/feedback");
 const { selectIncident } = require("../grouping-policy");
+const { applyReAlert } = require("../re-alert");
 
 const schemaPath = path.join(__dirname, "../../ai/schema/grouping.json");
 const schemaText = fs.readFileSync(schemaPath, "utf8");
@@ -456,6 +458,18 @@ async function runStage({ config, db, callId, runId, pipeline }) {
     signals: payload.signals,
     explanation: payload.explanation
   });
+
+  const call = getCallById(db, callId);
+  if (call?.agency_id && call?.first_seen_at) {
+    applyReAlert({
+      db,
+      callId,
+      incidentId,
+      agencyId: call.agency_id,
+      occurredAt: call.first_seen_at,
+      windowMinutes: config.reAlertWindowMinutes
+    });
+  }
 
   if (pipeline?.enqueue) {
     pipeline.enqueue(callId, "incidentSummary");

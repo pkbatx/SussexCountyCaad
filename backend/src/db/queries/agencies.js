@@ -88,23 +88,35 @@ function setCallAgency(db, { callId, agencyId, agencyName, serviceType } = {}) {
     return;
   }
   db.prepare(
-    "UPDATE calls SET agency_id = ?, agency_name = ?, agency_service_type = ?, updated_at = ? WHERE call_id = ?"
+    "UPDATE calls SET agency_id = ?, agency_name = ?, agency_service_type = ?, service_type = ?, updated_at = ? WHERE call_id = ?"
   ).run(
     agencyId ?? null,
     agencyName ?? null,
+    serviceType ?? null,
     serviceType ?? null,
     new Date().toISOString(),
     callId
   );
 }
 
-function listAgencies(db, { q, limit = 200 } = {}) {
+function listAgencies(db, { q, limit = 200, start, end } = {}) {
   const search = q ? `%${normalizeKey(q)}%` : null;
+  const callClauses = [];
+  const callParams = [];
+  if (start) {
+    callClauses.push("calls.first_seen_at >= ?");
+    callParams.push(start);
+  }
+  if (end) {
+    callClauses.push("calls.first_seen_at <= ?");
+    callParams.push(end);
+  }
+  const callWhere = callClauses.length ? `AND ${callClauses.join(" AND ")}` : "";
   const rows = db
     .prepare(
-      "SELECT * FROM agency_registry WHERE (? IS NULL OR UPPER(canonical_name) LIKE ?) ORDER BY canonical_name ASC LIMIT ?"
+      `SELECT agency_registry.*, COUNT(calls.call_id) as call_count, COALESCE(SUM(CASE WHEN calls.re_alert_flag = 1 THEN 1 ELSE 0 END), 0) as re_alert_count FROM agency_registry LEFT JOIN calls ON calls.agency_id = agency_registry.agency_id ${callWhere} WHERE (? IS NULL OR UPPER(canonical_name) LIKE ?) GROUP BY agency_registry.agency_id ORDER BY canonical_name ASC LIMIT ?`
     )
-    .all(search, search, limit);
+    .all(...callParams, search, search, limit);
   return rows.map((row) => ({
     ...row,
     aliases: parseAliases(row.aliases_json)

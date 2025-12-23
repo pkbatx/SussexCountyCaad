@@ -35,6 +35,8 @@ function mapPointsHandler(req, res, { db }) {
     end: filters.end,
     incidentType: filters.incidentType,
     jurisdiction: filters.jurisdiction,
+    agency: filters.agency,
+    serviceType: filters.serviceType,
     status: filters.status,
     minConfidence: filters.minConfidence,
     bounds: hasBounds ? bounds : null

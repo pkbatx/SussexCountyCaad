@@ -38,7 +38,16 @@ function listSummariesForIncident(db, incidentId) {
     .all(incidentId);
 }
 
-function buildCallFilterSql({ start, end, status, incidentType, jurisdiction, minConfidence }) {
+function buildCallFilterSql({
+  start,
+  end,
+  status,
+  incidentType,
+  jurisdiction,
+  minConfidence,
+  agency,
+  serviceType
+}) {
   const clauses = [];
   const params = [];
   if (status && status !== "any") {
@@ -60,6 +69,44 @@ function buildCallFilterSql({ start, end, status, incidentType, jurisdiction, mi
   if (jurisdiction) {
     clauses.push("json_extract(meta.payload_json, '$.jurisdiction') = ?");
     params.push(jurisdiction);
+  }
+  if (agency) {
+    const agencies = Array.isArray(agency) ? agency : [agency];
+    const normalized = agencies.map((value) => String(value).trim()).filter(Boolean);
+    const unknownRequested = normalized.some(
+      (value) => value.toLowerCase() === "unknown"
+    );
+    const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+    const parts = [];
+    if (named.length) {
+      parts.push(`calls.agency_name IN (${named.map(() => "?").join(", ")})`);
+      params.push(...named);
+    }
+    if (unknownRequested) {
+      parts.push("(calls.agency_name IS NULL OR calls.agency_name = '')");
+    }
+    if (parts.length) {
+      clauses.push(`(${parts.join(" OR ")})`);
+    }
+  }
+  if (serviceType) {
+    const types = Array.isArray(serviceType) ? serviceType : [serviceType];
+    const normalized = types.map((value) => String(value).trim()).filter(Boolean);
+    const unknownRequested = normalized.some(
+      (value) => value.toLowerCase() === "unknown"
+    );
+    const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+    const parts = [];
+    if (named.length) {
+      parts.push(`calls.service_type IN (${named.map(() => "?").join(", ")})`);
+      params.push(...named);
+    }
+    if (unknownRequested) {
+      parts.push("(calls.service_type IS NULL OR calls.service_type = '')");
+    }
+    if (parts.length) {
+      clauses.push(`(${parts.join(" OR ")})`);
+    }
   }
   if (typeof minConfidence === "number") {
     clauses.push("COALESCE(gd.confidence, 0) >= ?");
@@ -86,9 +133,9 @@ function getSummaryMetrics(db, filters = {}) {
     )
     .get(...callFilter.params).count;
 
-  const failedStages = db
+  const reAlertCalls = db
     .prepare(
-      `SELECT COUNT(1) as count FROM call_stages cs JOIN calls ON cs.call_id = calls.call_id ${callFilter.joins} ${callFilter.where} ${callFilter.where ? "AND" : "WHERE"} cs.status = 'failed'`
+      `SELECT COUNT(1) as count FROM calls ${callFilter.joins} ${callFilter.where} ${callFilter.where ? "AND" : "WHERE"} calls.re_alert_flag = 1`
     )
     .get(...callFilter.params).count;
 
@@ -99,35 +146,17 @@ function getSummaryMetrics(db, filters = {}) {
     jurisdiction: filters.jurisdiction,
     status: filters.status,
     minConfidence: filters.minConfidence,
+    agency: filters.agency,
+    serviceType: filters.serviceType,
     limit: 1,
     offset: 0
   }).total;
-
-  const notificationClauses = [];
-  const notificationParams = [];
-  if (filters.start) {
-    notificationClauses.push("created_at >= ?");
-    notificationParams.push(filters.start);
-  }
-  if (filters.end) {
-    notificationClauses.push("created_at <= ?");
-    notificationParams.push(filters.end);
-  }
-  const notificationWhere = notificationClauses.length
-    ? `WHERE ${notificationClauses.join(" AND ")}`
-    : "";
-  const notificationsSent = db
-    .prepare(
-      `SELECT COUNT(1) as count FROM notifications ${notificationWhere} ${notificationWhere ? "AND" : "WHERE"} status = 'sent'`
-    )
-    .get(...notificationParams).count;
 
   return {
     total_calls: totalCalls,
     active_incidents: incidentsTotal,
     high_priority_calls: highPriority,
-    failed_stages: failedStages,
-    notifications_sent: notificationsSent
+    re_alert_calls: reAlertCalls
   };
 }
 

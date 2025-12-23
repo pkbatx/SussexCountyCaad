@@ -1,6 +1,12 @@
 import { fetchMapPoints } from "../api";
 import { createMapAdapter } from "./map-adapter";
-import { SUSSEX_CENTER, SUSSEX_BOUNDS, DEFAULT_ZOOM, TILE_URL } from "./config";
+import {
+  SUSSEX_CENTER,
+  SUSSEX_BOUNDS,
+  DEFAULT_ZOOM,
+  MAPBOX_ACCESS_TOKEN,
+  MAPBOX_STYLE
+} from "./config";
 
 function createToggle(label, active) {
   const button = document.createElement("button");
@@ -9,9 +15,43 @@ function createToggle(label, active) {
   return button;
 }
 
-export async function renderMapView({ filters, onSelect }) {
+let cachedView = null;
+let resizeListenerAttached = false;
+
+function updateToggleState(markersButton, heatButton, mode) {
+  const isHeat = mode === "heatmap";
+  markersButton.classList.toggle("active", !isHeat);
+  heatButton.classList.toggle("active", isHeat);
+}
+
+export async function renderMapView({ filters, onSelect, viewState, onViewState }) {
+  if (cachedView) {
+    cachedView.filters = filters;
+    cachedView.onSelect = onSelect;
+    if (cachedView.unsubscribeViewChange) {
+      cachedView.unsubscribeViewChange();
+    }
+    if (onViewState) {
+      cachedView.unsubscribeViewChange = cachedView.adapter.onViewChange((nextView) => {
+        onViewState({ ...nextView, hasUserView: true });
+      });
+    }
+    updateToggleState(
+      cachedView.markersButton,
+      cachedView.heatButton,
+      filters.mapMode || cachedView.mode || "markers"
+    );
+    await cachedView.refresh(filters.mapMode || cachedView.mode || "markers");
+    cachedView.adapter.map?.resize?.();
+    return cachedView.wrapper;
+  }
+
   const wrapper = document.createElement("div");
-  wrapper.className = "detail-section";
+  wrapper.className = "map-section";
+
+  const heading = document.createElement("div");
+  heading.className = "panel-title";
+  heading.textContent = "Geographic Context";
 
   const controls = document.createElement("div");
   controls.className = "map-controls";
@@ -29,28 +69,71 @@ export async function renderMapView({ filters, onSelect }) {
   panel.appendChild(canvas);
   panel.appendChild(status);
 
+  wrapper.appendChild(heading);
   wrapper.appendChild(controls);
   wrapper.appendChild(panel);
 
+  if (!MAPBOX_ACCESS_TOKEN) {
+    status.textContent =
+      "Mapbox token missing. Set MAPBOX_ACCESS_TOKEN in the root .env file.";
+    return wrapper;
+  }
+
+  const initialCenter = viewState?.center || SUSSEX_CENTER;
+  const initialZoom =
+    typeof viewState?.zoom === "number" ? viewState.zoom : DEFAULT_ZOOM;
+  const shouldFitBounds = !viewState?.hasUserView;
   const adapter = createMapAdapter(canvas, {
-    center: SUSSEX_CENTER,
-    zoom: DEFAULT_ZOOM,
-    tileUrl: TILE_URL
+    center: initialCenter,
+    zoom: initialZoom,
+    accessToken: MAPBOX_ACCESS_TOKEN,
+    style: MAPBOX_STYLE,
+    maxBounds: SUSSEX_BOUNDS
   });
-  adapter.setBounds(SUSSEX_BOUNDS);
-  const scheduleResize = () => {
-    setTimeout(() => {
-      adapter.map.invalidateSize();
-    }, 0);
+  if (shouldFitBounds) {
+    adapter.setBounds(SUSSEX_BOUNDS);
+  }
+  const recordViewState = () => {
+    if (!onViewState) return;
+    const snapshot = adapter.getViewState();
+    if (snapshot?.center) {
+      onViewState({ ...snapshot, hasUserView: true });
+    }
   };
-  window.addEventListener("resize", scheduleResize);
+  let unsubscribeViewChange = null;
+  if (onViewState) {
+    unsubscribeViewChange = adapter.onViewChange((nextView) => {
+      onViewState({ ...nextView, hasUserView: true });
+    });
+  }
+  const scheduleResize = () => {
+    const resize = () => {
+      if (typeof adapter.map?.resize === "function") {
+        adapter.map.resize();
+      } else if (typeof adapter.map?.invalidateSize === "function") {
+        adapter.map.invalidateSize();
+      }
+    };
+    requestAnimationFrame(() => requestAnimationFrame(resize));
+    setTimeout(resize, 100);
+  };
+  if (!resizeListenerAttached) {
+    window.addEventListener("resize", scheduleResize);
+    resizeListenerAttached = true;
+  }
+  if (typeof adapter.map?.once === "function") {
+    adapter.map.once("load", () => {
+      recordViewState();
+      scheduleResize();
+    });
+  }
   scheduleResize();
 
   async function refresh(mode) {
     status.textContent = "";
     try {
       const response = await fetchMapPoints({
-        filters,
+        filters: cachedView ? cachedView.filters : filters,
         mode,
         entity: "both"
       });
@@ -58,7 +141,8 @@ export async function renderMapView({ filters, onSelect }) {
       if (mode === "heatmap") {
         adapter.setHeatmap(response.points || []);
       } else {
-        adapter.setMarkers(response.points || [], { onSelect });
+        const selectionHandler = cachedView?.onSelect || onSelect;
+        adapter.setMarkers(response.points || [], { onSelect: selectionHandler });
       }
       if (response.truncated) {
         status.textContent = "Map truncated for performance. Narrow filters to see more.";
@@ -72,21 +156,39 @@ export async function renderMapView({ filters, onSelect }) {
 
   markersButton.addEventListener("click", async () => {
     filters.mapMode = "markers";
-    markersButton.classList.add("active");
-    heatButton.classList.remove("active");
+    if (cachedView) {
+      cachedView.mode = "markers";
+    }
+    updateToggleState(markersButton, heatButton, "markers");
     await refresh("markers");
     scheduleResize();
   });
 
   heatButton.addEventListener("click", async () => {
     filters.mapMode = "heatmap";
-    heatButton.classList.add("active");
-    markersButton.classList.remove("active");
+    if (cachedView) {
+      cachedView.mode = "heatmap";
+    }
+    updateToggleState(markersButton, heatButton, "heatmap");
     await refresh("heatmap");
     scheduleResize();
   });
 
+  cachedView = {
+    wrapper,
+    adapter,
+    markersButton,
+    heatButton,
+    status,
+    refresh,
+    filters,
+    onSelect,
+    mode: filters.mapMode || "markers",
+    unsubscribeViewChange
+  };
+
   await refresh(filters.mapMode || "markers");
+  recordViewState();
   scheduleResize();
 
   return wrapper;

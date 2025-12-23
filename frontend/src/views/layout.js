@@ -1,16 +1,64 @@
-export function renderLayout(target, { title, body, sidebar, main, summary }) {
+export function renderLayout(target, {
+  title,
+  left,
+  center,
+  right,
+  summary,
+  footer,
+  sseStatus,
+  nav
+}) {
   target.innerHTML = "";
 
   const header = document.createElement("header");
   header.className = "app-header";
-  header.innerHTML = `
-    <div class="brand">SussexCountyCAAD</div>
-    <nav class="nav">
-      <a class="nav-item" href="#incidents">Incidents</a>
-      <a class="nav-item" href="#calls">Calls</a>
-      <a class="nav-item" href="#notifications">Notifications</a>
-    </nav>
-  `;
+  const headerLeft = document.createElement("div");
+  headerLeft.className = "header-left";
+  const brand = document.createElement("div");
+  brand.className = "brand";
+  brand.textContent = "SussexCountyCAAD";
+  headerLeft.appendChild(brand);
+  const subtitle = document.createElement("div");
+  subtitle.className = "brand-subtitle";
+  subtitle.textContent = "Operational CAD View";
+  headerLeft.appendChild(subtitle);
+
+  const headerCenter = document.createElement("div");
+  headerCenter.className = "header-center";
+  if (nav) {
+    headerCenter.appendChild(nav);
+  }
+
+  const headerRight = document.createElement("div");
+  headerRight.className = "header-right";
+  const navTitle = document.createElement("div");
+  navTitle.className = "nav-title";
+  navTitle.textContent = "Operations Console";
+  headerRight.appendChild(navTitle);
+  const clock = document.createElement("div");
+  clock.className = "header-clock";
+  clock.textContent = new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  headerRight.appendChild(clock);
+
+  if (sseStatus?.status) {
+    const badge = document.createElement("div");
+    const status = sseStatus.status;
+    badge.className = `sse-status sse-status--${status}`;
+    badge.textContent =
+      status === "connected"
+        ? "Live"
+        : status === "connecting"
+        ? "Connecting"
+        : "Offline";
+    headerRight.appendChild(badge);
+  }
+
+  header.appendChild(headerLeft);
+  header.appendChild(headerCenter);
+  header.appendChild(headerRight);
 
   const shell = document.createElement("main");
   shell.className = "app-shell";
@@ -28,30 +76,43 @@ export function renderLayout(target, { title, body, sidebar, main, summary }) {
   const grid = document.createElement("div");
   grid.className = "app-grid";
 
-  const sidebarPanel = document.createElement("section");
-  sidebarPanel.className = "panel panel-sidebar";
-  if (sidebar) {
-    sidebarPanel.appendChild(sidebar);
+  const leftPanel = document.createElement("section");
+  leftPanel.className = "panel panel-left";
+  if (left) {
+    leftPanel.appendChild(left);
   }
 
-  const mainPanel = document.createElement("section");
-  mainPanel.className = "panel panel-main";
-  const mainContent = main || body;
-  if (mainContent) {
-    mainPanel.appendChild(mainContent);
+  const centerPanel = document.createElement("section");
+  centerPanel.className = "panel panel-center";
+  if (center) {
+    centerPanel.appendChild(center);
   } else {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     empty.textContent = "No data available.";
-    mainPanel.appendChild(empty);
+    centerPanel.appendChild(empty);
   }
 
-  grid.appendChild(sidebarPanel);
-  grid.appendChild(mainPanel);
+  const rightPanel = document.createElement("section");
+  rightPanel.className = "panel panel-right";
+  if (right) {
+    rightPanel.appendChild(right);
+  }
+
+  grid.appendChild(leftPanel);
+  grid.appendChild(centerPanel);
+  grid.appendChild(rightPanel);
 
   shell.appendChild(heading);
   shell.appendChild(summarySlot);
   shell.appendChild(grid);
+
+  if (footer) {
+    const footerSlot = document.createElement("div");
+    footerSlot.className = "app-footer";
+    footerSlot.appendChild(footer);
+    shell.appendChild(footerSlot);
+  }
 
   target.appendChild(header);
   target.appendChild(shell);

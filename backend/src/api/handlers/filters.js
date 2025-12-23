@@ -16,13 +16,22 @@ function parseListFilters(req, { defaultLimit = 50, maxLimit = 500 } = {}) {
     parseNumber(url.searchParams.get("limit"), defaultLimit),
     maxLimit
   );
+  const agencyValues = url.searchParams.getAll("agency");
+  const agencyFilter = agencyValues.length
+    ? agencyValues
+    : url.searchParams.get("agency") || undefined;
+  const serviceValues = url.searchParams.getAll("service_type");
+  const serviceFilter = serviceValues.length
+    ? serviceValues
+    : url.searchParams.get("service_type") || undefined;
 
   return {
     start: url.searchParams.get("start") || undefined,
     end: url.searchParams.get("end") || undefined,
     incidentType: url.searchParams.get("incident_type") || undefined,
     jurisdiction: url.searchParams.get("jurisdiction") || undefined,
-    agency: url.searchParams.get("agency") || undefined,
+    agency: agencyFilter,
+    serviceType: serviceFilter,
     status: url.searchParams.get("status") || undefined,
     minConfidence: parseNumber(url.searchParams.get("min_confidence"), undefined),
     limit,

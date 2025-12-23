@@ -76,6 +76,14 @@ function loadConfig() {
     groupingConfidenceThreshold: Number(
       process.env.GROUPING_CONFIDENCE_THRESHOLD || 0.7
     ),
+    digestRefreshHours: Number(process.env.DIGEST_REFRESH_HOURS || 2),
+    digestRefreshCallThreshold: Number(
+      process.env.DIGEST_REFRESH_CALL_THRESHOLD || 5
+    ),
+    reAlertWindowMinutes: Number(process.env.RE_ALERT_WINDOW_MINUTES || 7),
+    uiUnspecifiedLabel: process.env.UI_UNSPECIFIED_LABEL || "Unspecified",
+    uiUnmappedLabel: process.env.UI_UNMAPPED_LABEL || "Unmapped",
+    uiUnknownAgencyLabel: process.env.UI_UNKNOWN_AGENCY_LABEL || "Unknown",
     referencePoiPath: process.env.REFERENCE_POI_PATH || null,
     referenceStreetTownsPath: process.env.REFERENCE_STREET_TOWNS_PATH || null,
     referenceDataMaxCandidates: Number(
@@ -91,7 +99,10 @@ function loadConfig() {
       process.env.FEEDBACK_CONFIDENCE_PENALTY || 0.05
     ),
     feedbackMaxPenalty: Number(process.env.FEEDBACK_MAX_PENALTY || 0.2),
-    mapboxAccessToken: process.env.MAPBOX_ACCESS_TOKEN || null,
+    mapboxAccessToken:
+      process.env.MAPBOX_ACCESS_TOKEN ||
+      process.env.VITE_MAPBOX_ACCESS_TOKEN ||
+      null,
     mapboxGeocodeBbox: process.env.MAPBOX_GEOCODE_BBOX || null,
     mapboxGeocodeLimit: Number(process.env.MAPBOX_GEOCODE_LIMIT || 5),
     mapboxGeocodeTypes:

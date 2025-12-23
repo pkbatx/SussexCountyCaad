@@ -5,12 +5,14 @@ const {
   callDetailHandler,
   retryStageHandler
 } = require("./handlers/calls");
+const { audioHandler } = require("./handlers/audio");
 const {
   listIncidentsHandler,
   incidentDetailHandler
 } = require("./handlers/incidents");
 const { listAgenciesHandler } = require("./handlers/agencies");
 const { listNotificationsHandler } = require("./handlers/notifications");
+const { eventsHandler } = require("./handlers/events");
 const {
   submitCallFeedbackHandler,
   submitIncidentFeedbackHandler,
@@ -21,6 +23,8 @@ const { mapPointsHandler } = require("./handlers/map");
 const { debugCallHandler } = require("./handlers/debug");
 const {
   summaryMetricsHandler,
+  summaryInsightsHandler,
+  summaryDigestHandler,
   summaryTrendsHandler,
   summaryHotspotsHandler
 } = require("./handlers/summary");
@@ -38,6 +42,9 @@ function startApiServer({ config, db, pipeline }) {
       }
       if (parts.length === 3) {
         return callDetailHandler(req, res, { db, callId: parts[2] });
+      }
+      if (parts.length === 4 && parts[3] === "audio") {
+        return audioHandler(req, res, { db, callId: parts[2], config });
       }
     }
 
@@ -81,6 +88,14 @@ function startApiServer({ config, db, pipeline }) {
       return summaryHotspotsHandler(req, res, { db });
     }
 
+    if (req.method === "GET" && req.url.startsWith("/api/summary/digests")) {
+      return summaryDigestHandler(req, res, { db, config });
+    }
+
+    if (req.method === "GET" && req.url.startsWith("/api/summary/insights")) {
+      return summaryInsightsHandler(req, res, { db });
+    }
+
     if (req.method === "GET" && req.url.startsWith("/api/summary/trends")) {
       return summaryTrendsHandler(req, res, { db });
     }
@@ -89,13 +104,18 @@ function startApiServer({ config, db, pipeline }) {
       return summaryMetricsHandler(req, res, { db });
     }
 
+    if (req.method === "GET" && req.url.startsWith("/api/events")) {
+      return eventsHandler(req, res);
+    }
+
     if (req.url.startsWith("/api/feedback/")) {
       const parts = req.url.split("?")[0].split("/").filter(Boolean);
       if (parts.length === 4 && parts[2] === "calls") {
         if (req.method === "POST") {
           return submitCallFeedbackHandler(req, res, {
             db,
-            callId: parts[3]
+            callId: parts[3],
+            pipeline
           });
         }
         if (req.method === "GET") {
@@ -109,7 +129,8 @@ function startApiServer({ config, db, pipeline }) {
         if (req.method === "POST") {
           return submitIncidentFeedbackHandler(req, res, {
             db,
-            incidentId: parts[3]
+            incidentId: parts[3],
+            pipeline
           });
         }
         if (req.method === "GET") {

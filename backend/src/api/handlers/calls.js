@@ -13,6 +13,49 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function normalizeCallListItem(call) {
+  return {
+    call_id: call.call_id,
+    status: call.status,
+    first_seen_at: call.first_seen_at,
+    agency: call.agency ?? call.agency_name ?? null,
+    service_type: call.service_type ?? null,
+    incident_type: call.incident_type ?? null,
+    address: call.address ?? null,
+    town: call.town ?? null,
+    cross_street: call.cross_street ?? null,
+    poi: call.poi ?? null,
+    summary: call.summary ?? null,
+    re_alert: call.re_alert ?? call.re_alert_flag ?? 0,
+    incident_linked: Boolean(call.incident_id)
+  };
+}
+
+function normalizeStage(stage) {
+  return {
+    stage_name: stage.stage_name ?? stage.stage,
+    status: stage.status
+  };
+}
+
+function normalizeTranscript(transcript) {
+  return {
+    transcript_id: transcript.transcript_id,
+    text: transcript.text,
+    language: transcript.language ?? null,
+    created_at: transcript.created_at
+  };
+}
+
+function normalizeSummary(summary) {
+  return {
+    summary_id: summary.summary_id,
+    summary_text: summary.summary_text,
+    created_at: summary.created_at,
+    version: summary.version
+  };
+}
+
 function resolveTownFallback(db, callId) {
   const locations = listLocationsForSubject(db, { subjectType: "call", subjectId: callId });
   if (!locations.length) {
@@ -63,9 +106,11 @@ async function listCallsHandler(req, res, { db }) {
     incidentType: filters.incidentType,
     jurisdiction: filters.jurisdiction,
     agency: filters.agency,
+    serviceType: filters.serviceType,
     minConfidence: filters.minConfidence
   });
-  sendJson(res, 200, result);
+  const items = result.items.map(normalizeCallListItem);
+  sendJson(res, 200, { items, total: result.total });
 }
 
 async function callDetailHandler(req, res, { db, callId }) {
@@ -106,12 +151,28 @@ async function callDetailHandler(req, res, { db, callId }) {
     summary: summaries[0]?.summary_text ?? null
   };
 
+  const callView = normalizeCallListItem({
+    ...call,
+    agency: operatorFields.agency,
+    incident_type: operatorFields.incident_type,
+    address: operatorFields.address,
+    town: operatorFields.town,
+    cross_street: operatorFields.cross_street,
+    poi: operatorFields.poi,
+    summary: operatorFields.summary,
+    re_alert: call.re_alert_flag
+  });
+  const audio = call.source_path
+    ? { url: `/api/calls/${callId}/audio`, format: call.audio_format ?? null }
+    : null;
+
   sendJson(res, 200, {
-    call,
-    stages,
-    transcripts,
-    summaries,
+    call: callView,
+    stages: stages.map(normalizeStage),
+    transcripts: transcripts.map(normalizeTranscript),
+    summaries: summaries.map(normalizeSummary),
     operator_fields: operatorFields,
+    audio,
     locations: [],
     notifications: [],
     incidents: []

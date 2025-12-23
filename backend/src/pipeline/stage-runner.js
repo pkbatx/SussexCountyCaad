@@ -6,6 +6,7 @@ const {
   createStageRun,
   updateStageRun
 } = require("../db/queries/stages");
+const { emitRefresh } = require("../services/events");
 
 async function runStageWithTracking({ config, db, callId, stageName, handler, pipeline }) {
   ensureStage(db, callId, stageName);
@@ -42,6 +43,7 @@ async function runStageWithTracking({ config, db, callId, stageName, handler, pi
       lastRunId: runId,
       completedAt
     });
+    emitRefresh("stage");
   } catch (error) {
     const completedAt = new Date().toISOString();
     updateStageRun(db, runId, {
@@ -54,6 +56,7 @@ async function runStageWithTracking({ config, db, callId, stageName, handler, pi
       completedAt,
       lastError: error.message
     });
+    emitRefresh("stage");
     throw error;
   }
 }

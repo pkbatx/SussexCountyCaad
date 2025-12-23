@@ -1,0 +1,114 @@
+openapi: 3.0.3
+info:
+  title: SussexCountyCAAD SSE + Mapbox API
+  version: 0.1.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/events:
+    get:
+      summary: SSE refresh stream
+      description: Emits lightweight refresh events; clients refetch existing endpoints.
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              examples:
+                refresh:
+                  value: |
+                    event: refresh
+                    data: {}
+
+  /api/calls:
+    get:
+      summary: List calls
+      responses:
+        "200":
+          description: Call list
+          content:
+            application/json: {}
+
+  /api/calls/{callId}:
+    get:
+      summary: Call detail
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Call detail
+          content:
+            application/json: {}
+
+  /api/incidents:
+    get:
+      summary: List incidents
+      responses:
+        "200":
+          description: Incident list
+          content:
+            application/json: {}
+
+  /api/incidents/{incidentId}:
+    get:
+      summary: Incident detail
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Incident detail
+          content:
+            application/json: {}
+
+  /api/map/points:
+    get:
+      summary: Map points for calls/incidents
+      responses:
+        "200":
+          description: Map point list
+          content:
+            application/json: {}
+
+  /api/summary:
+    get:
+      summary: Summary metrics
+      responses:
+        "200":
+          description: Summary metrics
+          content:
+            application/json: {}
+
+  /api/summary/insights:
+    get:
+      summary: Summary insights
+      responses:
+        "200":
+          description: Summary insights
+          content:
+            application/json: {}
+
+  /api/summary/trends:
+    get:
+      summary: Summary trends
+      responses:
+        "200":
+          description: Summary trends
+          content:
+            application/json: {}
+
+  /api/summary/hotspots:
+    get:
+      summary: Summary hotspots
+      responses:
+        "200":
+          description: Summary hotspots
+          content:
+            application/json: {}
