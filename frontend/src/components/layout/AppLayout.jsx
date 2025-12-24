@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-
-function formatClock(value) {
-  return value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
+import { formatClock24 } from "../../state/formatting";
+import logoUrl from "../../../caad.png";
 
 export function AppLayout({
   title,
@@ -10,15 +8,18 @@ export function AppLayout({
   center,
   right,
   summary,
+  topbar,
   footer,
   sseStatus,
-  nav
+  nav,
+  layout = "standard",
+  centerSpan = "one"
 }) {
-  const [clock, setClock] = useState(() => formatClock(new Date()));
+  const [clock, setClock] = useState(() => formatClock24(new Date()));
 
   useEffect(() => {
-    const tick = () => setClock(formatClock(new Date()));
-    const timer = setInterval(tick, 60000);
+    const tick = () => setClock(formatClock24(new Date()));
+    const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -33,12 +34,14 @@ export function AppLayout({
     <>
       <header className="app-header">
         <div className="header-left">
-          <div className="brand">SussexCountyCAAD</div>
-          <div className="brand-subtitle">Operational CAD View</div>
+          <img className="brand-logo" src={logoUrl} alt="CAAD logo" />
+          <div className="brand-text">
+            <div className="brand">Sussex County</div>
+            <div className="brand-subtitle">Computer Aided Agent Dispatch</div>
+          </div>
         </div>
         <div className="header-center">{nav}</div>
         <div className="header-right">
-          <div className="nav-title">Operations Console</div>
           <div className="header-clock">{clock}</div>
           {statusLabel ? (
             <div className={`sse-status sse-status--${sseStatus.status}`}>
@@ -48,15 +51,48 @@ export function AppLayout({
         </div>
       </header>
 
+      {topbar ? <div className="app-topbar">{topbar}</div> : null}
+
       <main className="app-shell">
-        <div className="page-heading">{title}</div>
-        <div className="summary-strip">{summary}</div>
-        <div className="app-grid">
-          <section className="panel panel-left">{left}</section>
-          <section className="panel panel-center">
+        {title ? <div className="page-heading">{title}</div> : null}
+        {summary ? <div className="summary-strip">{summary}</div> : null}
+        <div
+          className={[
+            layout === "ops" ? "ops-grid" : "app-grid",
+            layout === "ops" ? "" : left ? "" : "app-grid--no-left",
+            layout === "ops" ? "" : right ? "" : "app-grid--no-right"
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {left ? (
+            <section
+              className={layout === "ops" ? "ops-column ops-column-left" : "panel panel-left"}
+            >
+              {left}
+            </section>
+          ) : null}
+          <section
+            className={
+              layout === "ops"
+                ? [
+                    "ops-column ops-column-center",
+                    centerSpan === "two" ? "ops-column--span-two" : ""
+                  ]
+                    .filter(Boolean)
+                    .join(" ")
+                : "panel panel-center"
+            }
+          >
             {center || <div className="empty-state">No data available.</div>}
           </section>
-          <section className="panel panel-right">{right}</section>
+          {right ? (
+            <section
+              className={layout === "ops" ? "ops-column ops-column-right" : "panel panel-right"}
+            >
+              {right}
+            </section>
+          ) : null}
         </div>
         {footer ? <div className="app-footer">{footer}</div> : null}
       </main>

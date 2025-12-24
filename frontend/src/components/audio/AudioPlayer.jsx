@@ -64,16 +64,25 @@ export function AudioPlayer({ source }) {
     audio.play().catch(() => null);
   }, [source]);
 
-  const timeLabel = useMemo(() => {
-    return `${formatTime(currentTime)} / ${formatTime(duration)}`;
-  }, [currentTime, duration]);
+  const timeLabel = useMemo(
+    () => ({
+      current: formatTime(currentTime),
+      duration: formatTime(duration)
+    }),
+    [currentTime, duration]
+  );
 
   return (
     <div className="audio-player">
-      <div className="audio-meta">{metaLabel}</div>
+      <div className="audio-meta">
+        <div className="audio-title">{metaLabel}</div>
+        <div className="audio-status">
+          {source?.src ? (isPlaying ? "Playing" : "Paused") : "Idle"}
+        </div>
+      </div>
       <div className="audio-controls">
         <button
-          className="button small audio-control"
+          className="audio-toggle"
           type="button"
           disabled={!source?.src}
           onClick={() => {
@@ -88,22 +97,27 @@ export function AudioPlayer({ source }) {
         >
           {isPlaying ? "Pause" : "Play"}
         </button>
-        <input
-          className="audio-progress"
-          type="range"
-          min="0"
-          max={String(duration || 0)}
-          step="0.1"
-          value={String(currentTime || 0)}
-          onChange={(event) => {
-            const audio = audioRef.current;
-            if (!audio) return;
-            const nextValue = Number(event.target.value);
-            audio.currentTime = nextValue;
-            setCurrentTime(nextValue);
-          }}
-        />
-        <div className="audio-time">{timeLabel}</div>
+        <div className="audio-progress-wrap">
+          <input
+            className="audio-progress"
+            type="range"
+            min="0"
+            max={String(duration || 0)}
+            step="0.1"
+            value={String(currentTime || 0)}
+            onChange={(event) => {
+              const audio = audioRef.current;
+              if (!audio) return;
+              const nextValue = Number(event.target.value);
+              audio.currentTime = nextValue;
+              setCurrentTime(nextValue);
+            }}
+          />
+          <div className="audio-time-row">
+            <span>{timeLabel.current}</span>
+            <span>{timeLabel.duration}</span>
+          </div>
+        </div>
       </div>
       <audio ref={audioRef} className="audio-element" preload="none" />
     </div>

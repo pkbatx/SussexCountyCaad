@@ -1,4 +1,6 @@
 const { listCalls, getCallById } = require("../../db/queries/calls");
+const { getLatestGroupingDecisionForCall } = require("../../db/queries/grouping_decisions");
+const { buildConfidenceSignal, summarizeLinkReason } = require("../../services/confidence");
 const { getStagesForCall } = require("../../db/queries/stages");
 const { listTranscriptsForCall } = require("../../db/queries/transcripts");
 const { listSummariesForCall } = require("../../db/queries/summaries");
@@ -14,6 +16,19 @@ function sendJson(res, status, payload) {
 }
 
 function normalizeCallListItem(call) {
+  const incidentId = call.incident_id ?? call.incidentId ?? null;
+  const transcriptionStatus = call.transcription_status ?? null;
+  const groupingStatus = call.grouping_status ?? null;
+  const progressState = deriveProgressState({
+    incidentId,
+    status: call.status,
+    transcriptionStatus,
+    groupingStatus
+  });
+  const confidenceSignal = buildConfidenceSignal({
+    confidence: call.grouping_confidence,
+    requiresReview: Boolean(call.grouping_requires_review)
+  });
   return {
     call_id: call.call_id,
     status: call.status,
@@ -27,8 +42,28 @@ function normalizeCallListItem(call) {
     poi: call.poi ?? null,
     summary: call.summary ?? null,
     re_alert: call.re_alert ?? call.re_alert_flag ?? 0,
-    incident_linked: Boolean(call.incident_id)
+    incident_id: incidentId,
+    incident_linked: Boolean(incidentId),
+    transcription_status: transcriptionStatus,
+    grouping_status: groupingStatus,
+    progress_state: progressState,
+    confidence_signal: confidenceSignal
   };
+}
+
+function deriveProgressState({ incidentId, status, transcriptionStatus, groupingStatus }) {
+  if (incidentId) return "grouped";
+  const transcriptionActive = ["pending", "running", "processing"].includes(
+    String(transcriptionStatus || "").toLowerCase()
+  );
+  if (transcriptionActive) return "transcribing";
+  const groupingActive = ["pending", "running", "processing"].includes(
+    String(groupingStatus || "").toLowerCase()
+  );
+  if (groupingActive) return "analyzing";
+  if (status === "failed") return "failed";
+  if (status === "succeeded" || status === "processing") return "pending_incident";
+  return "received";
 }
 
 function normalizeStage(stage) {
@@ -107,7 +142,8 @@ async function listCallsHandler(req, res, { db }) {
     jurisdiction: filters.jurisdiction,
     agency: filters.agency,
     serviceType: filters.serviceType,
-    minConfidence: filters.minConfidence
+    minConfidence: filters.minConfidence,
+    pendingIncident: filters.pendingIncident
   });
   const items = result.items.map(normalizeCallListItem);
   sendJson(res, 200, { items, total: result.total });
@@ -122,6 +158,7 @@ async function callDetailHandler(req, res, { db, callId }) {
   const stages = getStagesForCall(db, callId);
   const transcripts = listTranscriptsForCall(db, callId);
   const summaries = listSummariesForCall(db, callId);
+  const groupingDecision = getLatestGroupingDecisionForCall(db, callId);
   const extracts = listMetadataForCall(db, callId)
     .filter((item) => item.schema_version === "extraction.v2")
     .sort((a, b) => (a.created_at > b.created_at ? -1 : 1));
@@ -160,7 +197,12 @@ async function callDetailHandler(req, res, { db, callId }) {
     cross_street: operatorFields.cross_street,
     poi: operatorFields.poi,
     summary: operatorFields.summary,
-    re_alert: call.re_alert_flag
+    re_alert: call.re_alert_flag,
+    incident_id: groupingDecision?.incident_id ?? call.incident_id ?? null,
+    grouping_confidence: groupingDecision?.confidence ?? null,
+    grouping_requires_review: groupingDecision?.requires_review ?? false,
+    transcription_status: stages.find((stage) => stage.stage_name === "transcription")?.status,
+    grouping_status: stages.find((stage) => stage.stage_name === "grouping")?.status
   });
   const audio = call.source_path
     ? { url: `/api/calls/${callId}/audio`, format: call.audio_format ?? null }
@@ -172,6 +214,11 @@ async function callDetailHandler(req, res, { db, callId }) {
     transcripts: transcripts.map(normalizeTranscript),
     summaries: summaries.map(normalizeSummary),
     operator_fields: operatorFields,
+    confidence_signal: buildConfidenceSignal({
+      confidence: groupingDecision?.confidence ?? null,
+      requiresReview: groupingDecision?.requires_review ?? false,
+      reasonLabel: summarizeLinkReason(groupingDecision?.explanation || groupingDecision?.decision)
+    }),
     audio,
     locations: [],
     notifications: [],

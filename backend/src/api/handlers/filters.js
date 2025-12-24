@@ -16,6 +16,11 @@ function parseListFilters(req, { defaultLimit = 50, maxLimit = 500 } = {}) {
     parseNumber(url.searchParams.get("limit"), defaultLimit),
     maxLimit
   );
+  const pendingParam = url.searchParams.get("pending_incident");
+  const pendingIncident =
+    pendingParam === "1" ||
+    pendingParam === "true" ||
+    pendingParam === "yes";
   const agencyValues = url.searchParams.getAll("agency");
   const agencyFilter = agencyValues.length
     ? agencyValues
@@ -34,6 +39,15 @@ function parseListFilters(req, { defaultLimit = 50, maxLimit = 500 } = {}) {
     serviceType: serviceFilter,
     status: url.searchParams.get("status") || undefined,
     minConfidence: parseNumber(url.searchParams.get("min_confidence"), undefined),
+    pendingIncident,
+    activeWindowMinutes: parseNumber(
+      url.searchParams.get("active_window_minutes"),
+      undefined
+    ),
+    resolveWindowMinutes: parseNumber(
+      url.searchParams.get("resolve_window_minutes"),
+      undefined
+    ),
     limit,
     offset: parseNumber(url.searchParams.get("offset"), 0),
     cursor: url.searchParams.get("cursor") || undefined,

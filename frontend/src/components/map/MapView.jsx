@@ -110,6 +110,15 @@ export function MapView({
   }, [scheduleResize]);
 
   useEffect(() => {
+    if (!containerRef.current || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      scheduleResize();
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [scheduleResize]);
+
+  useEffect(() => {
     const handleResize = () => scheduleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);

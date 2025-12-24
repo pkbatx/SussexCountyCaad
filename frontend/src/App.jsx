@@ -1,13 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { AppLayout } from "./components/layout/AppLayout";
-import { FilterPanel } from "./components/filters/FilterPanel";
-import { SummaryPanel } from "./components/summary/SummaryPanel";
-import { CallsList } from "./components/calls/CallsList";
+import { TopFilterBar } from "./components/filters/TopFilterBar";
+import { DigestColumn } from "./components/summary/DigestColumn";
 import { IncidentsBoard } from "./components/incidents/IncidentsBoard";
 import { CallDetail } from "./components/details/CallDetail";
 import { IncidentDetail } from "./components/details/IncidentDetail";
 import { AudioPlayer } from "./components/audio/AudioPlayer";
-import { ViewToggle } from "./components/controls/ViewToggle";
 import { MapView } from "./components/map/MapView";
 import { NotificationsView } from "./components/notifications/NotificationsView";
 import { createDefaultFilters, updateFilters } from "./state/filters";
@@ -18,10 +16,10 @@ import { useMapViewState } from "./hooks/useMapViewState";
 
 export function App() {
   const [filters, setFilters] = useState(createDefaultFilters);
-  const [listMode, setListMode] = useState("incidents");
-  const [route, setRoute] = useHashRoute("");
+  const [route, setRoute] = useHashRoute("incidents");
   const [refreshToken, setRefreshToken] = useState(0);
   const [audioSource, setAudioSource] = useState(null);
+  const [returnRoute, setReturnRoute] = useState("incidents");
 
   const handleRefresh = useCallback(() => setRefreshToken(Date.now()), []);
   const { status: sseStatus } = useSseStatus({
@@ -29,18 +27,11 @@ export function App() {
   });
 
   const {
-    getCachedCall,
     invalidateCall,
     invalidateIncident,
     clearAll
   } = useDetailCache();
   const { viewState, updateViewState } = useMapViewState();
-
-  useEffect(() => {
-    if (route === "calls" || route === "incidents") {
-      setListMode(route);
-    }
-  }, [route]);
 
   const applyFilters = useCallback(
     (next) => {
@@ -51,52 +42,75 @@ export function App() {
     [clearAll]
   );
 
-  const summary = useMemo(
-    () => <SummaryPanel filters={filters} refreshToken={refreshToken} />,
-    [filters, refreshToken]
-  );
-
-  const leftPanel = useMemo(
-    () => <FilterPanel filters={filters} onChange={applyFilters} />,
-    [filters, applyFilters]
-  );
-
   const audioFooter = <AudioPlayer source={audioSource} />;
+  const topbar = (
+    <TopFilterBar
+      filters={filters}
+      onChange={applyFilters}
+      refreshToken={refreshToken}
+    />
+  );
+
+  const navigateToCall = useCallback(
+    (callId) => {
+      const fallbackRoute = route || "incidents";
+      setReturnRoute(fallbackRoute);
+      setRoute(`call/${callId}`);
+    },
+    [route, setRoute]
+  );
+
+  const handleMapSelect = useCallback(
+    (point) => {
+      if (point.entity_type === "call") {
+        navigateToCall(point.entity_id);
+      } else {
+        setRoute(`incident/${point.entity_id}`);
+      }
+    },
+    [navigateToCall, setRoute]
+  );
+
+  const mapPanel = (
+    <MapView
+      filters={filters}
+      refreshToken={refreshToken}
+      viewState={viewState}
+      onViewState={updateViewState}
+      onModeChange={(next) => applyFilters({ mapMode: next })}
+      onSelect={handleMapSelect}
+    />
+  );
+
+  const rightColumn = (
+    <div className="ops-right-stack">
+      <DigestColumn filters={filters} refreshToken={refreshToken} />
+      {mapPanel}
+    </div>
+  );
 
   if (route.startsWith("call/")) {
     const callId = route.split("/")[1];
     return (
       <AppLayout
         title="Call Detail"
-        left={leftPanel}
+        left={null}
         center={
           <CallDetail
             callId={callId}
             prefetched={null}
-            onBack={() => setRoute("")}
+            onBack={() => setRoute(returnRoute || "incidents")}
             onPlayAudio={setAudioSource}
             onFeedback={invalidateCall}
           />
         }
-        right={
-          <MapView
-            filters={filters}
-            refreshToken={refreshToken}
-            viewState={viewState}
-            onViewState={updateViewState}
-            onModeChange={(next) => applyFilters({ mapMode: next })}
-            onSelect={(point) => {
-              if (point.entity_type === "call") {
-                setRoute(`call/${point.entity_id}`);
-              } else {
-                setRoute(`incident/${point.entity_id}`);
-              }
-            }}
-          />
-        }
-        summary={summary}
+        right={rightColumn}
+        summary={null}
+        topbar={topbar}
         footer={audioFooter}
         sseStatus={{ status: sseStatus }}
+        layout="ops"
+        centerSpan="two"
       />
     );
   }
@@ -106,34 +120,23 @@ export function App() {
     return (
       <AppLayout
         title="Incident Detail"
-        left={leftPanel}
+        left={null}
         center={
           <IncidentDetail
             incidentId={incidentId}
             prefetched={null}
             onBack={() => setRoute("incidents")}
             onFeedback={invalidateIncident}
+            onSelectCall={navigateToCall}
           />
         }
-        right={
-          <MapView
-            filters={filters}
-            refreshToken={refreshToken}
-            viewState={viewState}
-            onViewState={updateViewState}
-            onModeChange={(next) => applyFilters({ mapMode: next })}
-            onSelect={(point) => {
-              if (point.entity_type === "call") {
-                setRoute(`call/${point.entity_id}`);
-              } else {
-                setRoute(`incident/${point.entity_id}`);
-              }
-            }}
-          />
-        }
-        summary={summary}
+        right={rightColumn}
+        summary={null}
+        topbar={topbar}
         footer={audioFooter}
         sseStatus={{ status: sseStatus }}
+        layout="ops"
+        centerSpan="two"
       />
     );
   }
@@ -146,70 +149,32 @@ export function App() {
         center={<NotificationsView />}
         right={null}
         summary={null}
+        topbar={topbar}
         footer={null}
         sseStatus={{ status: sseStatus }}
       />
     );
   }
 
-  const centerBody = listMode === "calls" ? (
-    <CallsList
-      filters={filters}
-      refreshToken={refreshToken}
-      onSelect={(callId) => setRoute(`call/${callId}`)}
-      onPlay={async (callId) => {
-        const detail = await getCachedCall(callId);
-        setAudioSource({
-          src: detail.audio?.url,
-          label: `${detail.operator_fields?.agency || "Unknown"} \u00b7 ${
-            detail.operator_fields?.incident_type || "Unspecified"
-          }`
-        });
-      }}
-    />
-  ) : (
-    <IncidentsBoard
-      filters={filters}
-      refreshToken={refreshToken}
-      onSelect={(incidentId) => setRoute(`incident/${incidentId}`)}
-    />
-  );
-
   return (
     <AppLayout
-      title="Operations"
-      left={leftPanel}
+      title={null}
+      left={null}
       center={
-        <div className="center-stack">
-          <ViewToggle
-            value={listMode}
-            onChange={(next) => {
-              setListMode(next);
-              setRoute(next);
-            }}
-          />
-          {centerBody}
-        </div>
-      }
-      right={
-        <MapView
+        <IncidentsBoard
           filters={filters}
           refreshToken={refreshToken}
-          viewState={viewState}
-          onViewState={updateViewState}
-          onModeChange={(next) => applyFilters({ mapMode: next })}
-          onSelect={(point) => {
-            if (point.entity_type === "call") {
-              setRoute(`call/${point.entity_id}`);
-            } else {
-              setRoute(`incident/${point.entity_id}`);
-            }
-          }}
+          onSelect={(incidentId) => setRoute(`incident/${incidentId}`)}
+          onSelectCall={navigateToCall}
         />
       }
-      summary={summary}
+      right={rightColumn}
+      summary={null}
+      topbar={topbar}
       footer={audioFooter}
       sseStatus={{ status: sseStatus }}
+      layout="ops"
+      centerSpan="two"
     />
   );
 }

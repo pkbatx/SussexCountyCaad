@@ -1,4 +1,5 @@
 import { serializeFilters } from "./state/filters";
+import { AUTO_RESOLVE_MINUTES } from "./config";
 
 async function fetchJson(path, options = {}) {
   const response = await fetch(path, options);
@@ -65,7 +66,12 @@ export function fetchMapPoints({ filters, mode = "markers", entity = "both" } = 
 
 export function fetchSummaryMetrics({ filters } = {}) {
   const params = serializeFilters(filters || {});
-  return fetchJson(`/api/summary?${params.toString()}`);
+  params.set("resolve_window_minutes", String(AUTO_RESOLVE_MINUTES));
+  return fetchJson(`/api/summary?${params.toString()}`).then((data) => ({
+    ...data,
+    windowStart: data.window_start ?? data.windowStart ?? filters?.start ?? null,
+    windowEnd: data.window_end ?? data.windowEnd ?? filters?.end ?? null
+  }));
 }
 
 export function fetchTrendBuckets({ filters, bucketMinutes = 60 } = {}) {
@@ -90,7 +96,15 @@ export function fetchInsights({ filters, limit = 10 } = {}) {
 export function fetchDigestSummaries({ filters } = {}) {
   const params = serializeFilters(filters || {});
   const query = params.toString();
-  return fetchJson(query ? `/api/summary/digests?${query}` : "/api/summary/digests");
+  return fetchJson(query ? `/api/summary/digests?${query}` : "/api/summary/digests").then(
+    (data) => ({
+      ...data,
+      digests: (data?.digests || []).map((digest) => ({
+        ...digest,
+        entries: Array.isArray(digest.entries) ? digest.entries : []
+      }))
+    })
+  );
 }
 
 export function submitCallFeedback(callId, payload) {

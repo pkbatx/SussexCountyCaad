@@ -20,6 +20,26 @@ export function fromLocalInput(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+export function toDateInputValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (num) => String(num).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function fromDateInputStart(value) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+export function fromDateInputEnd(value) {
+  if (!value) return null;
+  const date = new Date(`${value}T23:59:59.999`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export function applyRelativeWindow(hours) {
   const end = new Date();
   const start = new Date(end.getTime() - hours * 60 * 60 * 1000);
@@ -47,6 +67,7 @@ export function serializeFilters(filters) {
   if (filters.end) params.set("end", filters.end);
   if (filters.incidentType) params.set("incident_type", filters.incidentType);
   if (filters.jurisdiction) params.set("jurisdiction", filters.jurisdiction);
+  if (filters.pendingIncident) params.set("pending_incident", "true");
   if (Array.isArray(filters.agencies) && filters.agencies.length) {
     filters.agencies.forEach((agency) => params.append("agency", agency));
   } else if (filters.agency) {

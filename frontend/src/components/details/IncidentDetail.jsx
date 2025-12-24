@@ -4,31 +4,35 @@ import {
   listIncidentFeedback,
   submitIncidentFeedback
 } from "../../api";
+import { formatConfidenceSignal, formatRelativeTime } from "../../state/formatting";
 
-function formatRelative(value) {
-  if (!value) return { text: "Unknown time", title: "" };
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { text: value, title: "" };
-  const diffSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  let text = "Just now";
-  if (diffSeconds >= 60) {
-    const diffMinutes = Math.floor(diffSeconds / 60);
-    if (diffMinutes < 60) {
-      text = `${diffMinutes}m ago`;
-    } else {
-      const diffHours = Math.floor(diffMinutes / 60);
-      if (diffHours < 24) {
-        text = `${diffHours}h ago`;
-      } else {
-        const diffDays = Math.floor(diffHours / 24);
-        text = `${diffDays}d ago`;
-      }
-    }
-  }
-  return { text, title: date.toLocaleString() };
+function resolveProgressLabel(progressState) {
+  const value = String(progressState || "");
+  if (value === "grouped") return "Grouped";
+  if (value === "pending_incident") return "Pending incident";
+  if (value === "transcribing") return "Transcribing";
+  if (value === "analyzing") return "Analyzing";
+  if (value === "failed") return "Needs attention";
+  return "Received";
 }
 
-export function IncidentDetail({ incidentId, prefetched, onBack, onFeedback }) {
+function formatDispatchTime(value) {
+  if (!value) return { text: "Unknown time", title: "" };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { text: String(value), title: "" };
+  return {
+    text: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    title: date.toLocaleString()
+  };
+}
+
+export function IncidentDetail({
+  incidentId,
+  prefetched,
+  onBack,
+  onFeedback,
+  onSelectCall
+}) {
   const [data, setData] = useState(prefetched || null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(!prefetched);
@@ -82,12 +86,13 @@ export function IncidentDetail({ incidentId, prefetched, onBack, onFeedback }) {
 
   const latestRollup = data?.rollups?.[0];
   const updatedAt = latestRollup?.created_at || data?.incident?.updated_at || "n/a";
-  const updatedLabel = formatRelative(updatedAt);
+  const updatedLabel = formatRelativeTime(updatedAt);
   const summary = latestRollup?.summary_text || "No rollup summary yet.";
   const operator = data?.operator_fields || {};
   const agencyLabel = operator.agency || "Unknown";
   const typeLabel = operator.incident_type || "Unspecified";
   const addressLabel = operator.address || operator.town || "No address";
+  const incidentConfidence = formatConfidenceSignal(data?.incident?.confidence_signal);
 
   const feedbackFields = useMemo(
     () => [
@@ -119,10 +124,32 @@ export function IncidentDetail({ incidentId, prefetched, onBack, onFeedback }) {
     return <div className="empty-state">{error || "Incident not found."}</div>;
   }
 
-  const memberMeta = new Map(
-    (data.members || []).map((member) => [member.call_id || member.callId, member])
-  );
-  const memberCalls = data.member_calls?.length ? data.member_calls : data.members || [];
+  const memberCalls = data.member_calls?.length ? data.member_calls : [];
+  const chronologicalCalls = [...memberCalls].sort((a, b) => {
+    const left = new Date(a.first_seen_at || 0).getTime();
+    const right = new Date(b.first_seen_at || 0).getTime();
+    return left - right;
+  });
+  const rollupUpdates = (data.rollups || []).flatMap((rollup) => {
+    const updates =
+      Array.isArray(rollup.latest_update) && rollup.latest_update.length
+        ? rollup.latest_update
+        : rollup.summary_text
+        ? [rollup.summary_text]
+        : [];
+    return updates.map((text) => ({
+      text,
+      created_at: rollup.created_at
+    }));
+  });
+  const seenUpdates = new Set();
+  const dedupedUpdates = rollupUpdates.filter((entry) => {
+    if (!entry.text) return false;
+    const key = entry.text.trim().toLowerCase();
+    if (seenUpdates.has(key)) return false;
+    seenUpdates.add(key);
+    return true;
+  });
 
   return (
     <div className="incident-detail">
@@ -133,7 +160,12 @@ export function IncidentDetail({ incidentId, prefetched, onBack, onFeedback }) {
       <div className="detail-header">
         <div className="detail-title">Incident Detail</div>
         <div className="detail-path">{addressLabel}</div>
-        <div className="incident-meta">{agencyLabel} {"\u00b7"} {typeLabel}</div>
+        <div className="incident-meta">
+          {agencyLabel} {"\u00b7"} {typeLabel} {"\u00b7"} {incidentConfidence.label}
+        </div>
+        {incidentConfidence.detail ? (
+          <div className="incident-meta">{incidentConfidence.detail}</div>
+        ) : null}
         <div className="incident-updated" title={updatedLabel.title}>
           last update {updatedLabel.text}
         </div>
@@ -141,35 +173,91 @@ export function IncidentDetail({ incidentId, prefetched, onBack, onFeedback }) {
       </div>
 
       <div className="detail-section">
+        <h2>Dispatch timeline</h2>
+        {chronologicalCalls.length ? (
+          <ul className="timeline-list">
+            {chronologicalCalls.map((member) => {
+              const callId = member.call_id || member.callId;
+              const agency = member.agency || "Unknown";
+              const serviceType = member.service_type ? ` · ${member.service_type}` : "";
+              const time = formatDispatchTime(member.first_seen_at);
+              return (
+                <li
+                  key={callId}
+                  className="timeline-item"
+                  onClick={() => onSelectCall?.(callId)}
+                >
+                  <div className="timeline-time" title={time.title}>
+                    {time.text}
+                  </div>
+                  <div className="timeline-body">
+                    <div className="timeline-title">
+                      {agency}
+                      {serviceType}
+                    </div>
+                    <div className="timeline-meta">
+                      {resolveProgressLabel(member.progress_state)}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="empty-state">No dispatch updates yet.</div>
+        )}
+      </div>
+
+      <div className="detail-section">
         <h2>Calls</h2>
-        <ul>
-          {memberCalls.map((member) => {
-            const callId = member.call_id || member.callId;
-            const meta = memberMeta.get(callId);
-            const reason = meta?.link_reason || meta?.linkReason || "linked";
-            const agency = member.agency || "Unknown";
-            const serviceType = member.service_type ? ` \u00b7 ${member.service_type}` : "";
-            const time = member.first_seen_at
-              ? new Date(member.first_seen_at).toLocaleString()
-              : "Unknown time";
-            return (
-              <li key={callId} className="evidence-item">
-                {agency}{serviceType} {"\u2022"} {reason} {"\u2022"} {time}
-              </li>
-            );
-          })}
-        </ul>
+        {memberCalls.length ? (
+          <ul className="detail-call-list">
+            {memberCalls.map((member) => {
+              const callId = member.call_id || member.callId;
+              const agency = member.agency || "Unknown";
+              const serviceType = member.service_type ? ` \u00b7 ${member.service_type}` : "";
+              const timeLabel = formatRelativeTime(member.first_seen_at);
+              const progress = resolveProgressLabel(member.progress_state);
+              const confidence = formatConfidenceSignal(member.confidence_signal);
+              return (
+                <li
+                  key={callId}
+                  className="detail-call-row"
+                  onClick={() => onSelectCall?.(callId)}
+                >
+                  <div>
+                    <div className="detail-call-title">
+                      {agency}
+                      {serviceType}
+                    </div>
+                    <div className="detail-call-meta">
+                      {progress} {"\u00b7"} {confidence.label}
+                    </div>
+                    {confidence.detail ? (
+                      <div className="detail-call-meta">{confidence.detail}</div>
+                    ) : null}
+                  </div>
+                  <div className="detail-call-time" title={timeLabel.title}>
+                    {timeLabel.text}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="empty-state">No calls linked to this incident yet.</div>
+        )}
       </div>
 
       <div className="detail-section">
         <h2>Rollup History</h2>
-        {data.rollups?.length ? (
+        {dedupedUpdates.length ? (
           <ul>
-            {data.rollups.map((rollup) => {
-              const created = formatRelative(rollup.created_at);
+            {dedupedUpdates.map((rollup, index) => {
+              const created = formatRelativeTime(rollup.created_at);
               return (
-                <li key={rollup.rollup_id} className="rollup-item">
-                  <div className="rollup-summary">{rollup.summary_text}</div>
+                <li key={`${rollup.text}-${index}`} className="rollup-item">
+                  <div className="rollup-summary">{rollup.text}</div>
                   <div className="rollup-meta">updated {created.text}</div>
                 </li>
               );

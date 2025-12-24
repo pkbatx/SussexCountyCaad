@@ -117,19 +117,35 @@ function buildCallFilterSql({
     where: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "",
     params,
     joins:
-      "LEFT JOIN metadata_extracts meta ON meta.call_id = calls.call_id AND meta.created_at = (SELECT MAX(created_at) FROM metadata_extracts WHERE call_id = calls.call_id) LEFT JOIN grouping_decisions gd ON gd.call_id = calls.call_id AND gd.created_at = (SELECT MAX(created_at) FROM grouping_decisions WHERE call_id = calls.call_id)"
+      "LEFT JOIN (SELECT call_id, CASE WHEN SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) > 0 THEN 'failed' WHEN SUM(CASE WHEN status IN ('running', 'pending', 'processing') THEN 1 ELSE 0 END) > 0 THEN 'processing' WHEN COUNT(*) > 0 THEN 'succeeded' ELSE NULL END as display_status FROM call_stages GROUP BY call_id) stage_status ON stage_status.call_id = calls.call_id LEFT JOIN metadata_extracts meta ON meta.call_id = calls.call_id AND meta.created_at = (SELECT MAX(created_at) FROM metadata_extracts WHERE call_id = calls.call_id) LEFT JOIN grouping_decisions gd ON gd.call_id = calls.call_id AND gd.created_at = (SELECT MAX(created_at) FROM grouping_decisions WHERE call_id = calls.call_id)"
   };
 }
 
 function getSummaryMetrics(db, filters = {}) {
   const callFilter = buildCallFilterSql(filters);
+  const resolveWindowMinutes = Number.isFinite(filters.resolveWindowMinutes)
+    ? filters.resolveWindowMinutes
+    : 20;
+  const now = Date.now();
   const totalCalls = db
     .prepare(`SELECT COUNT(1) as count FROM calls ${callFilter.joins} ${callFilter.where}`)
     .get(...callFilter.params).count;
 
-  const highPriority = db
+  const activeCalls = db
     .prepare(
-      `SELECT COUNT(1) as count FROM calls ${callFilter.joins} ${callFilter.where} ${callFilter.where ? "AND" : "WHERE"} LOWER(json_extract(meta.payload_json, '$.priority')) IN ('high', 'urgent', 'p1', 'priority 1')`
+      `SELECT COUNT(1) as count FROM calls ${callFilter.joins} ${callFilter.where} ${callFilter.where ? "AND" : "WHERE"} COALESCE(stage_status.display_status, calls.status) IN ('processing', 'pending', 'running')`
+    )
+    .get(...callFilter.params).count;
+
+  const resolvedCalls = db
+    .prepare(
+      `SELECT COUNT(1) as count FROM calls ${callFilter.joins} ${callFilter.where} ${callFilter.where ? "AND" : "WHERE"} COALESCE(stage_status.display_status, calls.status) IN ('succeeded', 'failed')`
+    )
+    .get(...callFilter.params).count;
+
+  const pendingCalls = db
+    .prepare(
+      `SELECT COUNT(1) as count FROM calls ${callFilter.joins} ${callFilter.where} ${callFilter.where ? "AND" : "WHERE"} (gd.incident_id IS NULL OR gd.incident_id = '')`
     )
     .get(...callFilter.params).count;
 
@@ -139,7 +155,7 @@ function getSummaryMetrics(db, filters = {}) {
     )
     .get(...callFilter.params).count;
 
-  const incidentsTotal = listIncidents(db, {
+  const incidentResults = listIncidents(db, {
     start: filters.start,
     end: filters.end,
     incidentType: filters.incidentType,
@@ -148,14 +164,44 @@ function getSummaryMetrics(db, filters = {}) {
     minConfidence: filters.minConfidence,
     agency: filters.agency,
     serviceType: filters.serviceType,
-    limit: 1,
+    limit: 1000,
     offset: 0
-  }).total;
+  });
+  const incidentCounts = incidentResults.items.reduce(
+    (acc, incident) => {
+      const lastActivity =
+        incident.last_activity_at ||
+        incident.last_call_at ||
+        incident.last_rollup_at ||
+        incident.updated_at;
+      if (!lastActivity) {
+        acc.active += 1;
+        return acc;
+      }
+      const timestamp = new Date(lastActivity).getTime();
+      if (!Number.isFinite(timestamp)) {
+        acc.active += 1;
+        return acc;
+      }
+      const ageMinutes = (now - timestamp) / (1000 * 60);
+      if (ageMinutes >= resolveWindowMinutes) {
+        acc.resolved += 1;
+      } else {
+        acc.active += 1;
+      }
+      return acc;
+    },
+    { active: 0, resolved: 0 }
+  );
 
   return {
-    total_calls: totalCalls,
-    active_incidents: incidentsTotal,
-    high_priority_calls: highPriority,
+    incident_count: incidentResults.total,
+    incident_active_count: incidentCounts.active,
+    incident_resolved_count: incidentCounts.resolved,
+    call_count: totalCalls,
+    pending_calls: pendingCalls,
+    call_active_count: activeCalls,
+    call_resolved_count: resolvedCalls,
     re_alert_calls: reAlertCalls
   };
 }

@@ -1,0 +1,325 @@
+openapi: 3.0.3
+info:
+  title: Incident-Centric Cohesion UI API
+  version: 1.0.0
+  description: Incident-first feeds for monitoring, digest summaries, and drill-down.
+
+servers:
+  - url: /api
+
+paths:
+  /incidents:
+    get:
+      summary: List incidents for the active monitoring window
+      parameters:
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: incident_type
+          schema:
+            type: string
+        - in: query
+          name: jurisdiction
+          schema:
+            type: string
+        - in: query
+          name: agency
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Incident list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/IncidentSummary"
+                  window_start:
+                    type: string
+                    format: date-time
+                  window_end:
+                    type: string
+                    format: date-time
+
+  /incidents/{incidentId}:
+    get:
+      summary: Get incident detail with call drill-down
+      parameters:
+        - in: path
+          name: incidentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Incident detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentDetail"
+
+  /calls/{callId}:
+    get:
+      summary: Get call detail
+      parameters:
+        - in: path
+          name: callId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Call detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallDetail"
+
+  /summary:
+    get:
+      summary: Incident-first summary metrics
+      parameters:
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Summary metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryMetrics"
+
+  /summary/digests:
+    get:
+      summary: Incident digest summaries for the window
+      parameters:
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Incident digest list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/IncidentDigestEntry"
+                  window_start:
+                    type: string
+                    format: date-time
+                  window_end:
+                    type: string
+                    format: date-time
+
+components:
+  schemas:
+    IncidentSummary:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        status:
+          type: string
+        summary:
+          type: string
+        location_label:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        last_activity_at:
+          type: string
+          format: date-time
+        call_count:
+          type: integer
+        pending:
+          type: boolean
+      required:
+        - incident_id
+        - status
+        - summary
+        - updated_at
+
+    IncidentDetail:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        status:
+          type: string
+        summary:
+          type: string
+        location_label:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallSummary"
+        rollup_history:
+          type: array
+          items:
+            $ref: "#/components/schemas/RollupHistoryEntry"
+      required:
+        - incident_id
+        - status
+        - summary
+
+    CallSummary:
+      type: object
+      properties:
+        call_id:
+          type: string
+        incident_id:
+          type: string
+          nullable: true
+        agency:
+          type: string
+        service_type:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+        transcription_status:
+          type: string
+        confidence_signal:
+          $ref: "#/components/schemas/ConfidenceSignal"
+      required:
+        - call_id
+        - received_at
+
+    CallDetail:
+      type: object
+      properties:
+        call_id:
+          type: string
+        incident_id:
+          type: string
+          nullable: true
+        agency:
+          type: string
+        service_type:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+        transcription_status:
+          type: string
+        audio_url:
+          type: string
+          nullable: true
+        confidence_signal:
+          $ref: "#/components/schemas/ConfidenceSignal"
+      required:
+        - call_id
+        - received_at
+
+    IncidentDigestEntry:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        summary:
+          type: string
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - incident_id
+        - summary
+        - window_start
+        - window_end
+
+    RollupHistoryEntry:
+      type: object
+      properties:
+        changed_at:
+          type: string
+          format: date-time
+        change_type:
+          type: string
+        change_summary:
+          type: string
+      required:
+        - changed_at
+        - change_summary
+
+    ConfidenceSignal:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [High, Medium, Low]
+        review_status:
+          type: string
+          enum: [no_review, needs_review, confirmed]
+        reason_label:
+          type: string
+      required:
+        - tier
+        - review_status
+
+    SummaryMetrics:
+      type: object
+      properties:
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        incident_count:
+          type: integer
+        active_incident_count:
+          type: integer
+        pending_incident_count:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - incident_count
+        - updated_at

@@ -2,11 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Listbox, RadioGroup, Switch } from "@headlessui/react";
 import { listAgencies } from "../../api";
 import { SERVICE_TYPES } from "../../config";
-import {
-  applyRelativeWindow,
-  fromLocalInput,
-  toLocalInputValue
-} from "../../state/filters";
+
 
 const STATUS_OPTIONS = [
   { value: "any", label: "All" },
@@ -62,57 +58,6 @@ export function FilterPanel({ filters, onChange }) {
 
   return (
     <div className="filter-panel">
-      <div className="filter-section">
-        <div className="panel-title">Operational window</div>
-        <div className="quick-range">
-          <button
-            className="button small"
-            type="button"
-            onClick={() => onChange(applyRelativeWindow(24))}
-          >
-            Last 24h
-          </button>
-          <button
-            className="button small"
-            type="button"
-            onClick={() => onChange(applyRelativeWindow(24 * 7))}
-          >
-            Last 7d
-          </button>
-          <button
-            className="button small"
-            type="button"
-            onClick={() => onChange(applyRelativeWindow(24 * 30))}
-          >
-            Last 30d
-          </button>
-        </div>
-        <div className="filter-grid filter-grid--two">
-          <label className="filter-field">
-            <span className="filter-label">Start</span>
-            <input
-              className="filter-input"
-              type="datetime-local"
-              value={toLocalInputValue(filters.start)}
-              onChange={(event) =>
-                onChange({ start: fromLocalInput(event.target.value) })
-              }
-            />
-          </label>
-          <label className="filter-field">
-            <span className="filter-label">End</span>
-            <input
-              className="filter-input"
-              type="datetime-local"
-              value={toLocalInputValue(filters.end)}
-              onChange={(event) =>
-                onChange({ end: fromLocalInput(event.target.value) })
-              }
-            />
-          </label>
-        </div>
-      </div>
-
       <div className="filter-section">
         <div className="panel-title">Service filters</div>
         <div className="service-toggle-row">

@@ -22,6 +22,34 @@ function appendAgencyClause(clauses, params, agency) {
   }
 }
 
+function appendRollupAgencyClause(clauses, params, agency) {
+  if (!agency) return;
+  const agencies = Array.isArray(agency) ? agency : [agency];
+  const normalized = agencies.map((value) => String(value).trim()).filter(Boolean);
+  if (!normalized.length) return;
+  const unknownRequested = normalized.some(
+    (value) => value.toLowerCase() === "unknown"
+  );
+  const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+  const parts = [];
+  if (named.length) {
+    parts.push(
+      `json_extract(rollups.key_fields_json, '$.agency') IN (${named
+        .map(() => "?")
+        .join(", ")})`
+    );
+    params.push(...named);
+  }
+  if (unknownRequested) {
+    parts.push(
+      "(json_extract(rollups.key_fields_json, '$.agency') IS NULL OR json_extract(rollups.key_fields_json, '$.agency') = '')"
+    );
+  }
+  if (parts.length) {
+    clauses.push(`(${parts.join(" OR ")})`);
+  }
+}
+
 function buildDigestFilter({ windowStart, windowEnd, filters = {} } = {}) {
   const clauses = [];
   const params = [];
@@ -76,6 +104,68 @@ function buildDigestFilter({ windowStart, windowEnd, filters = {} } = {}) {
   };
 }
 
+function buildIncidentDigestFilter({ windowStart, windowEnd, filters = {} } = {}) {
+  const clauses = [];
+  const params = [];
+  if (windowStart) {
+    clauses.push("rollups.created_at >= ?");
+    params.push(windowStart);
+  }
+  if (windowEnd) {
+    clauses.push("rollups.created_at <= ?");
+    params.push(windowEnd);
+  }
+  if (filters.status && filters.status !== "any") {
+    clauses.push("json_extract(rollups.key_fields_json, '$.status') = ?");
+    params.push(filters.status);
+  }
+  if (filters.incidentType) {
+    clauses.push("json_extract(rollups.key_fields_json, '$.incident_type') = ?");
+    params.push(filters.incidentType);
+  }
+  if (filters.jurisdiction) {
+    clauses.push("json_extract(rollups.key_fields_json, '$.jurisdiction') = ?");
+    params.push(filters.jurisdiction);
+  }
+  appendRollupAgencyClause(clauses, params, filters.agency || filters.agencies);
+  if (filters.serviceType) {
+    const types = Array.isArray(filters.serviceType)
+      ? filters.serviceType
+      : [filters.serviceType];
+    const normalized = types.map((value) => String(value).trim()).filter(Boolean);
+    const unknownRequested = normalized.some(
+      (value) => value.toLowerCase() === "unknown"
+    );
+    const named = normalized.filter((value) => value.toLowerCase() !== "unknown");
+    const parts = [];
+    if (named.length) {
+      parts.push(
+        `agency_registry.service_type IN (${named.map(() => "?").join(", ")})`
+      );
+      params.push(...named);
+    }
+    if (unknownRequested) {
+      parts.push(
+        "(agency_registry.service_type IS NULL OR agency_registry.service_type = '')"
+      );
+    }
+    if (parts.length) {
+      clauses.push(`(${parts.join(" OR ")})`);
+    }
+  }
+  if (typeof filters.minConfidence === "number") {
+    clauses.push("COALESCE(incident_groups.group_confidence, 0) >= ?");
+    params.push(filters.minConfidence);
+  }
+
+  return {
+    joins:
+      "LEFT JOIN incident_groups ON incident_groups.incident_id = rollups.incident_id LEFT JOIN incident_group_members ON incident_group_members.incident_id = rollups.incident_id LEFT JOIN incident_agency_stats ON incident_agency_stats.incident_id = rollups.incident_id LEFT JOIN agency_registry ON agency_registry.agency_id = incident_agency_stats.agency_id",
+    where: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "",
+    params
+  };
+}
+
 function appendCondition(where, condition) {
   if (!condition) return where;
   if (!where) return `WHERE ${condition}`;
@@ -118,6 +208,39 @@ function createDigestSummary(
   return db.prepare("SELECT * FROM digest_summaries WHERE digest_id = ?").get(digestId);
 }
 
+function countIncidentsInWindow(db, { windowStart, windowEnd, filters } = {}) {
+  const filter = buildIncidentDigestFilter({ windowStart, windowEnd, filters });
+  const row = db
+    .prepare(
+      `SELECT COUNT(DISTINCT rollups.incident_id) as count FROM incident_rollups rollups ${filter.joins} ${filter.where}`
+    )
+    .get(...filter.params);
+  return row?.count ?? 0;
+}
+
+function listIncidentDigestEntries(
+  db,
+  { windowStart, windowEnd, filters, limit = 50 } = {}
+) {
+  const filter = buildIncidentDigestFilter({ windowStart, windowEnd, filters });
+  const baseWhere = [];
+  const baseParams = [];
+  if (windowStart) {
+    baseWhere.push("created_at >= ?");
+    baseParams.push(windowStart);
+  }
+  if (windowEnd) {
+    baseWhere.push("created_at <= ?");
+    baseParams.push(windowEnd);
+  }
+  const windowClause = baseWhere.length ? `WHERE ${baseWhere.join(" AND ")}` : "";
+  return db
+    .prepare(
+      `SELECT rollups.incident_id as incident_id, rollups.created_at as created_at, rollups.summary_text as summary_text, rollups.key_fields_json as key_fields_json, rollups.confidence as confidence, incident_groups.group_confidence as group_confidence, incident_groups.call_count as call_count, incident_groups.re_alert_count as re_alert_count, incident_groups.normalized_address as normalized_address, json_extract(rollups.key_fields_json, '$.agency') as agency, json_extract(rollups.key_fields_json, '$.incident_type') as incident_type, json_extract(rollups.key_fields_json, '$.address') as address, json_extract(rollups.key_fields_json, '$.town') as town, json_extract(rollups.key_fields_json, '$.cross_street') as cross_street, json_extract(rollups.key_fields_json, '$.poi') as poi, json_extract(rollups.key_fields_json, '$.jurisdiction') as jurisdiction, json_extract(rollups.key_fields_json, '$.status') as status FROM incident_rollups rollups JOIN (SELECT incident_id, MAX(created_at) as latest_created_at FROM incident_rollups ${windowClause} GROUP BY incident_id) latest ON rollups.incident_id = latest.incident_id AND rollups.created_at = latest.latest_created_at ${filter.joins} ${filter.where} GROUP BY rollups.incident_id ORDER BY rollups.created_at DESC LIMIT ?`
+    )
+    .all(...baseParams, ...filter.params, limit);
+}
+
 function countCallsInWindow(db, { windowStart, windowEnd, filters } = {}) {
   const filter = buildDigestFilter({ windowStart, windowEnd, filters });
   const row = db
@@ -155,6 +278,8 @@ function listDigestTranscripts(db, { windowStart, windowEnd, filters, limit = 50
 module.exports = {
   getLatestDigestSummary,
   createDigestSummary,
+  countIncidentsInWindow,
+  listIncidentDigestEntries,
   countCallsInWindow,
   listTownServiceCounts,
   listDigestTranscripts

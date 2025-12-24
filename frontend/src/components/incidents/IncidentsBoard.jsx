@@ -1,34 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { listIncidents } from "../../api";
+import { listCalls, listIncidents } from "../../api";
 import {
   AUTO_RESOLVE_MINUTES,
   MONITOR_WINDOW_MINUTES,
   TAG_NEW_WINDOW_MINUTES,
   TAG_UPDATED_WINDOW_MINUTES
 } from "../../config";
-
-function formatTimestamp(value) {
-  if (!value) return { text: "Unknown time", title: "" };
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { text: value, title: "" };
-  const diffSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  let text = "Just now";
-  if (diffSeconds >= 60) {
-    const diffMinutes = Math.floor(diffSeconds / 60);
-    if (diffMinutes < 60) {
-      text = `${diffMinutes}m ago`;
-    } else {
-      const diffHours = Math.floor(diffMinutes / 60);
-      if (diffHours < 24) {
-        text = `${diffHours}h ago`;
-      } else {
-        const diffDays = Math.floor(diffHours / 24);
-        text = `${diffDays}d ago`;
-      }
-    }
-  }
-  return { text, title: date.toLocaleString() };
-}
+import { formatConfidenceSignal, formatRelativeTime } from "../../state/formatting";
 
 function minutesSince(value) {
   if (!value) return null;
@@ -38,7 +16,11 @@ function minutesSince(value) {
 }
 
 function deriveBucket(incident) {
-  const updatedAt = incident.last_call_at || incident.last_rollup_at || incident.updated_at;
+  const updatedAt =
+    incident.last_activity_at ||
+    incident.last_call_at ||
+    incident.last_rollup_at ||
+    incident.updated_at;
   const ageMinutes = minutesSince(updatedAt);
   if (ageMinutes === null) {
     return { bucket: "active", label: "Active", ageMinutes: null };
@@ -69,6 +51,7 @@ function buildTags(incident) {
 
   if (memberCount >= 2) tags.push("Multi-Call");
   if (reAlertCount > 0) tags.push("Re-alert");
+  if (incident.pending) tags.push("Rollup pending");
   if (!incident.address && !incident.town) tags.push("Unmapped");
   if (!incident.incident_type || incident.status === "failed") {
     tags.push("Needs Attention");
@@ -119,11 +102,48 @@ function AgencyList({ agencies }) {
   );
 }
 
-export function IncidentsBoard({ filters, onSelect, refreshToken }) {
+function resolveProgressLabel(progressState) {
+  const value = String(progressState || "");
+  if (value === "transcribing") return "Transcribing";
+  if (value === "analyzing") return "Analyzing";
+  if (value === "pending_incident") return "Pending incident";
+  if (value === "failed") return "Needs attention";
+  if (value === "received") return "Received";
+  return "Pending incident";
+}
+
+function resolveIncidentService(incident, agencies) {
+  const textParts = [
+    incident.incident_type,
+    incident.latest_summary,
+    incident.agency
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const agencyText = (agencies || []).map((agency) => agency.toLowerCase()).join(" ");
+  const combined = `${textParts} ${agencyText}`;
+  if (/(fire|structure|smoke|alarm)/.test(combined)) return "fire";
+  if (/(ems|ambulance|medical|injury|cardiac|paramedic)/.test(combined)) return "ems";
+  if (/(police|law|traffic|special)/.test(combined)) return "special";
+  return "unknown";
+}
+
+function resolveRecency(ageMinutes) {
+  if (typeof ageMinutes !== "number") return "";
+  if (ageMinutes <= TAG_NEW_WINDOW_MINUTES) return "hot";
+  if (ageMinutes <= TAG_UPDATED_WINDOW_MINUTES) return "warm";
+  return "";
+}
+
+export function IncidentsBoard({ filters, onSelect, onSelectCall, refreshToken }) {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState("");
+  const [pendingCalls, setPendingCalls] = useState([]);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [pendingError, setPendingError] = useState("");
   const [loading, setLoading] = useState(false);
   const prevFiltersRef = useRef("");
   const limit = 50;
@@ -158,6 +178,30 @@ export function IncidentsBoard({ filters, onSelect, refreshToken }) {
     loadPage({ replace: true, nextOffset: 0 });
   }, [filters, refreshToken, loadPage]);
 
+  useEffect(() => {
+    let active = true;
+    async function loadPending() {
+      setPendingError("");
+      try {
+        const result = await listCalls({
+          filters: { ...filters, pendingIncident: true },
+          limit: 20,
+          offset: 0
+        });
+        if (!active) return;
+        setPendingCalls(result.items || []);
+        setPendingTotal(result.total ?? 0);
+      } catch (err) {
+        if (!active) return;
+        setPendingError(`Failed to load pending calls: ${err.message}`);
+      }
+    }
+    loadPending();
+    return () => {
+      active = false;
+    };
+  }, [filters, refreshToken]);
+
   const buckets = useMemo(() => {
     const grouped = {
       active: [],
@@ -187,6 +231,59 @@ export function IncidentsBoard({ filters, onSelect, refreshToken }) {
 
   return (
     <div className="incidents-view">
+      <section className="pending-incidents">
+        <div className="incident-column-header">
+          <span>Pending incident candidates</span>
+          <span className="column-hint">
+            {pendingTotal ? `${pendingTotal} awaiting grouping` : "No pending calls"}
+          </span>
+        </div>
+        {pendingCalls.length ? (
+          <ul className="incident-list pending-list">
+            {pendingCalls.map((call) => {
+              const address = call.address || call.town || "Location pending";
+              const updatedAt = call.first_seen_at || call.created_at;
+              const timestamp = formatRelativeTime(updatedAt);
+              const agency = call.agency || "Unknown agency";
+              const progress = resolveProgressLabel(call.progress_state);
+              const confidence = formatConfidenceSignal(call.confidence_signal);
+              return (
+                <li
+                  key={call.call_id}
+                  className="cad-card pending-card"
+                  data-service={call.service_type ? call.service_type.toLowerCase() : "unknown"}
+                  onClick={() => onSelectCall?.(call.call_id)}
+                >
+                  <div className="cad-card-main">
+                    <div className="cad-card-title">{address}</div>
+                    <div className="cad-card-summary">
+                      {call.summary || "Awaiting incident rollup."}
+                    </div>
+                    <div className="cad-card-meta">
+                      {agency} {"\u00b7"} {progress}
+                    </div>
+                    <div className="cad-card-tags">
+                      <span className="tag tag-pending">{progress}</span>
+                      <span className="tag">{confidence.label}</span>
+                    </div>
+                  </div>
+                  <div className="cad-card-status">
+                    <span className="status-badge status-processing">Pending</span>
+                    <div className="incident-updated" title={timestamp.title}>
+                      {timestamp.text}
+                    </div>
+                    <div className="incident-meta">{confidence.detail}</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="empty-state">
+            {pendingError || "No pending calls in the current window."}
+          </div>
+        )}
+      </section>
       <div className="incident-board">
         {bucketDefs.map((bucketDef) => (
           <section
@@ -201,11 +298,15 @@ export function IncidentsBoard({ filters, onSelect, refreshToken }) {
               {(buckets[bucketDef.key] || []).map((incident) => {
                 const address = incident.address || incident.town || "No address";
                 const updatedAt =
-                  incident.last_call_at || incident.last_rollup_at || incident.updated_at || "n/a";
+                  incident.last_activity_at ||
+                  incident.last_call_at ||
+                  incident.last_rollup_at ||
+                  incident.updated_at ||
+                  "n/a";
                 const memberCount = incident.member_count ?? 0;
                 const reAlertCount = incident.re_alert_count ?? 0;
                 const summary = incident.latest_summary || "No rollup summary yet.";
-                const timestamp = formatTimestamp(updatedAt);
+                const timestamp = formatRelativeTime(updatedAt);
                 const agencies = Array.isArray(incident.agencies)
                   ? incident.agencies
                   : incident.agency
@@ -219,16 +320,23 @@ export function IncidentsBoard({ filters, onSelect, refreshToken }) {
                     ? null
                     : Math.max(AUTO_RESOLVE_MINUTES - Math.floor(bucket.ageMinutes), 0);
                 const incidentId = incident.incident_id || incident.incidentId;
+                const confidence = formatConfidenceSignal(incident.confidence_signal);
+                const serviceKey = resolveIncidentService(incident, agencies);
+                const recency = resolveRecency(bucket.ageMinutes);
                 return (
                   <li
                     key={incidentId}
                     className="cad-card"
+                    data-service={serviceKey}
+                    data-recency={recency || undefined}
                     onClick={() => onSelect(incidentId)}
                   >
                     <div className="cad-card-main">
                       <div className="cad-card-title">{address}</div>
                       <div className="cad-card-summary">{summary}</div>
-                      <div className="cad-card-meta">{metaLine || "Unspecified"}</div>
+                      <div className="cad-card-meta">
+                        {metaLine || "Unspecified"} {"\u00b7"} {confidence.label}
+                      </div>
                       <div className="cad-card-agencies">
                         <AgencyList agencies={agencies} />
                       </div>
@@ -247,11 +355,12 @@ export function IncidentsBoard({ filters, onSelect, refreshToken }) {
                       <div className="incident-updated" title={timestamp.title}>
                         {timestamp.text}
                       </div>
-                      {memberCount > 1 ? (
-                        <div className="incident-meta">calls {memberCount}</div>
-                      ) : null}
+                      <div className="incident-meta">Calls linked {memberCount}</div>
                       {reAlertCount > 0 ? (
                         <div className="incident-meta">re-alerts {reAlertCount}</div>
+                      ) : null}
+                      {confidence.detail ? (
+                        <div className="incident-meta">{confidence.detail}</div>
                       ) : null}
                       {resolveIn !== null ? (
                         <div className="incident-meta">auto resolve in {resolveIn}m</div>

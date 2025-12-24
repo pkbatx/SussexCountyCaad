@@ -28,9 +28,13 @@ function resolveWindow(filters) {
 
 function normalizeSummaryMetrics(metrics) {
   return {
-    total_calls: metrics.total_calls ?? 0,
-    active_incidents: metrics.active_incidents ?? 0,
-    high_priority_calls: metrics.high_priority_calls ?? 0,
+    incident_count: metrics.incident_count ?? 0,
+    incident_active_count: metrics.incident_active_count ?? 0,
+    incident_resolved_count: metrics.incident_resolved_count ?? 0,
+    call_count: metrics.call_count ?? 0,
+    pending_calls: metrics.pending_calls ?? 0,
+    call_active_count: metrics.call_active_count ?? 0,
+    call_resolved_count: metrics.call_resolved_count ?? 0,
     re_alert_calls: metrics.re_alert_calls ?? 0
   };
 }
@@ -38,7 +42,12 @@ function normalizeSummaryMetrics(metrics) {
 function summaryMetricsHandler(req, res, { db }) {
   const filters = parseListFilters(req);
   const metrics = getSummaryMetrics(db, filters);
-  sendJson(res, 200, normalizeSummaryMetrics(metrics));
+  const { windowStart, windowEnd } = resolveWindow(filters);
+  sendJson(res, 200, {
+    ...normalizeSummaryMetrics(metrics),
+    window_start: windowStart,
+    window_end: windowEnd
+  });
 }
 
 function summaryInsightsHandler(req, res, { db }) {
@@ -81,7 +90,36 @@ async function summaryDigestHandler(req, res, { db, config }) {
   const filters = parseListFilters(req);
   try {
     const digests = await getDigestSummaries(db, config, filters);
-    sendJson(res, 200, { digests });
+    const normalized = (digests || []).map((digest) => {
+      let payload = {};
+      if (digest.summary_json) {
+        try {
+          payload = JSON.parse(digest.summary_json);
+        } catch (_error) {
+          payload = {};
+        }
+      }
+      const lines =
+        Array.isArray(payload.lines) && payload.lines.length
+          ? payload.lines
+          : digest.summary_text
+          ? digest.summary_text.split("\n")
+          : [];
+      const entries =
+        Array.isArray(payload.entries) && payload.entries.length
+          ? payload.entries
+          : lines.map((line) => ({ summary: line }));
+      return {
+        window_label: digest.window_label,
+        window_start: digest.window_start,
+        window_end: digest.window_end,
+        updated_at: digest.created_at ?? digest.updated_at ?? null,
+        total_incidents: payload.total_incidents ?? digest.call_count_window ?? 0,
+        detail_level: payload.detail_level ?? null,
+        entries
+      };
+    });
+    sendJson(res, 200, { digests: normalized });
   } catch (error) {
     sendJson(res, 500, { error: error.message || "Digest unavailable" });
   }
