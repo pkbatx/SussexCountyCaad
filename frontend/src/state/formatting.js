@@ -3,6 +3,43 @@ export function formatClock24(date = new Date()) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+export function formatDateTime24(date, { includeSeconds = true } = {}) {
+  if (!date) return "Unknown";
+  const pad = (value) => String(value).padStart(2, "0");
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  return `${year}-${month}-${day} ${hours}:${minutes}${includeSeconds ? `:${seconds}` : ""}`;
+}
+
+export function parseFilenameTimestamp(sourcePath) {
+  if (!sourcePath) return null;
+  const base = String(sourcePath).split(/[\\/]/).pop();
+  if (!base) return null;
+  const name = base.replace(/\.[^.]+$/, "");
+  const pattern = /(20\\d{2})[_-](\\d{2})[_-](\\d{2})[_-](\\d{2})[_-](\\d{2})[_-](\\d{2})/g;
+  let match = null;
+  let lastMatch = null;
+  while ((match = pattern.exec(name)) !== null) {
+    lastMatch = match;
+  }
+  if (!lastMatch) return null;
+  const [, year, month, day, hour, minute, second] = lastMatch;
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second)
+  );
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
 export function formatRelativeTime(value) {
   if (!value) return { text: "Unknown time", title: "" };
   const date = new Date(value);
@@ -31,17 +68,10 @@ export function formatConfidenceSignal(signal) {
     return { label: "Confidence unknown", detail: "" };
   }
   const tier = signal.tier || "Unknown";
-  const reviewStatus = signal.review_status || "no_review";
-  const reviewLabel =
-    reviewStatus === "confirmed"
-      ? "Confirmed"
-      : reviewStatus === "needs_review"
-      ? "Needs review"
-      : "Unreviewed";
   const reason = signal.reason_label || "";
   return {
     label: `${tier} confidence`,
-    detail: reason ? `${reviewLabel} · ${reason}` : reviewLabel
+    detail: reason
   };
 }
 

@@ -1,0 +1,184 @@
+openapi: 3.0.3
+info:
+  title: Incident Timeline API
+  version: 1.0.0
+paths:
+  /api/incidents/{incidentId}/timeline:
+    get:
+      summary: Get unified timeline events for an incident
+      parameters:
+        - in: path
+          name: incidentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Timeline events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TimelineEvent"
+  /api/incidents/{incidentId}/summary:
+    get:
+      summary: Get persistent incident summary statements
+      parameters:
+        - in: path
+          name: incidentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Summary statements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statements:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SummaryStatement"
+  /api/summary/{statementId}/evidence:
+    get:
+      summary: Get evidence links for a summary statement
+      parameters:
+        - in: path
+          name: statementId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Evidence links
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evidence:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SummaryEvidenceLink"
+  /api/timeline/{eventId}:
+    get:
+      summary: Get full detail for a timeline event
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Timeline event detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event:
+                    $ref: "#/components/schemas/TimelineEvent"
+  /api/timeline/{eventId}/transcript:
+    get:
+      summary: Get transcript segments for a timeline event
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Transcript segments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  segments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TranscriptSegment"
+components:
+  schemas:
+    TimelineEvent:
+      type: object
+      properties:
+        event_id:
+          type: string
+        incident_id:
+          type: string
+        event_type:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        title:
+          type: string
+        summary:
+          type: string
+        parent_event_id:
+          type: string
+          nullable: true
+        contributes_to_summary:
+          type: boolean
+        key_facts:
+          type: object
+          additionalProperties: true
+        audio_ref:
+          type: object
+          nullable: true
+        transcript_ref:
+          type: object
+          nullable: true
+    TranscriptSegment:
+      type: object
+      properties:
+        segment_id:
+          type: string
+        event_id:
+          type: string
+        start_ms:
+          type: integer
+        end_ms:
+          type: integer
+        speaker_label:
+          type: string
+        text:
+          type: string
+    SummaryStatement:
+      type: object
+      properties:
+        statement_id:
+          type: string
+        incident_id:
+          type: string
+        statement_text:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        priority:
+          type: integer
+    SummaryEvidenceLink:
+      type: object
+      properties:
+        link_id:
+          type: string
+        statement_id:
+          type: string
+        event_id:
+          type: string
+        transcript_segment_id:
+          type: string
+        audio_start_ms:
+          type: integer
+        audio_end_ms:
+          type: integer

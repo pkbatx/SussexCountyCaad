@@ -44,6 +44,18 @@ export function getIncidentDetail(incidentId) {
   return fetchJson(`/api/incidents/${incidentId}`);
 }
 
+export function fetchIncidentTimeline(incidentId) {
+  return fetchJson(`/api/incidents/${incidentId}/timeline`);
+}
+
+export function fetchTimelineTranscript(eventId) {
+  return fetchJson(`/api/timeline/${encodeURIComponent(eventId)}/transcript`);
+}
+
+export function fetchSummaryEvidence(statementId) {
+  return fetchJson(`/api/summary/${encodeURIComponent(statementId)}/evidence`);
+}
+
 export function listAgencies({ filters, q } = {}) {
   const params = new URLSearchParams();
   if (filters?.start) params.set("start", filters.start);

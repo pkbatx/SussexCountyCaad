@@ -33,21 +33,23 @@ export function AppLayout({
   return (
     <>
       <header className="app-header">
-        <div className="header-left">
+        <a className="header-left brand-link" href="#/incidents">
           <img className="brand-logo" src={logoUrl} alt="CAAD logo" />
           <div className="brand-text">
             <div className="brand">Sussex County</div>
             <div className="brand-subtitle">Computer Aided Agent Dispatch</div>
           </div>
-        </div>
-        <div className="header-center">{nav}</div>
+        </a>
         <div className="header-right">
-          <div className="header-clock">{clock}</div>
-          {statusLabel ? (
-            <div className={`sse-status sse-status--${sseStatus.status}`}>
-              {statusLabel}
-            </div>
-          ) : null}
+          <div className="header-status-row">
+            <div className="header-clock">{clock}</div>
+            {statusLabel ? (
+              <div className={`sse-status sse-status--${sseStatus.status}`}>
+                {statusLabel}
+              </div>
+            ) : null}
+          </div>
+          {nav ? <div className="header-last-call">{nav}</div> : null}
         </div>
       </header>
 

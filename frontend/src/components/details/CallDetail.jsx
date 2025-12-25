@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { getCallDetail, listCallFeedback, retryStage, submitCallFeedback } from "../../api";
+import React, { useEffect, useState } from "react";
+import { getCallDetail } from "../../api";
 import { formatConfidenceSignal, formatRelativeTime } from "../../state/formatting";
 
 function resolveProgressLabel(progressState) {
@@ -15,14 +15,11 @@ function resolveProgressLabel(progressState) {
 export function CallDetail({
   callId,
   prefetched,
-  onBack,
-  onFeedback,
-  onPlayAudio
+  onBack
 }) {
   const [data, setData] = useState(prefetched || null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(!prefetched);
-  const [feedbackHistory, setFeedbackHistory] = useState([]);
 
   useEffect(() => {
     let active = true;
@@ -46,30 +43,6 @@ export function CallDetail({
     };
   }, [callId, prefetched]);
 
-  useEffect(() => {
-    let active = true;
-    async function loadFeedback() {
-      try {
-        const existing = await listCallFeedback(callId);
-        if (!active) return;
-        setFeedbackHistory(existing || []);
-      } catch (_error) {
-        if (!active) return;
-        setFeedbackHistory([
-          {
-            feedback_id: "error",
-            feedback_type: "Feedback history unavailable.",
-            apply_status: ""
-          }
-        ]);
-      }
-    }
-    loadFeedback();
-    return () => {
-      active = false;
-    };
-  }, [callId]);
-
   const operator = data?.operator_fields || {};
   const agencyLabel = operator.agency || "Unknown";
   const typeLabel = operator.incident_type || "Unspecified";
@@ -83,23 +56,6 @@ export function CallDetail({
   );
   const firstSeenLabel = formatRelativeTime(data?.call?.first_seen_at);
   const incidentId = data?.call?.incident_id || null;
-
-  const feedbackFields = useMemo(
-    () => [
-      { label: "Agency", value: agencyLabel, type: "wrong_agency", confirm: "confirm_agency" },
-      { label: "Incident type", value: typeLabel, type: "wrong_type", confirm: "confirm_type" },
-      { label: "Address", value: addressLabel, type: "wrong_address", confirm: "confirm_address" },
-      { label: "Town", value: townLabel || "Unknown", type: "wrong_town", confirm: "confirm_town" },
-      {
-        label: "Cross street",
-        value: crossLabel || "None",
-        type: "wrong_cross_street",
-        confirm: "confirm_cross_street"
-      },
-      { label: "POI", value: poiLabel || "None", type: "wrong_poi", confirm: "confirm_poi" }
-    ],
-    [agencyLabel, typeLabel, addressLabel, townLabel, crossLabel, poiLabel]
-  );
 
   if (loading) {
     return <div className="empty-state">Loading call detail...</div>;
@@ -129,21 +85,11 @@ export function CallDetail({
 
       <div className="detail-section">
         <h2>Audio</h2>
-        <div className="audio-row">
-          <button
-            className="button"
-            type="button"
-            disabled={!data.audio?.url}
-            onClick={() =>
-              onPlayAudio?.({
-                src: data.audio?.url,
-                label: `${agencyLabel} \u00b7 ${typeLabel}`
-              })
-            }
-          >
-            {data.audio?.url ? "Play in audio dock" : "Audio unavailable"}
-          </button>
-        </div>
+        {data.audio?.url ? (
+          <audio className="inline-audio" controls preload="none" src={data.audio.url} />
+        ) : (
+          <div className="empty-state">Audio unavailable.</div>
+        )}
       </div>
 
       <div className="detail-section">
@@ -180,77 +126,13 @@ export function CallDetail({
       </div>
 
       <div className="detail-section">
-        <h2>Details</h2>
-        <ul className="detail-table">
-          {feedbackFields.map((field) => (
-            <li key={field.label} className="detail-row">
-              <div className="detail-label">{field.label}</div>
-              <div className="detail-value">{field.value}</div>
-              <div className="detail-actions">
-                <button
-                  className="thumb-button thumb-button--confirm"
-                  type="button"
-                  title="Mark correct"
-                  onClick={async () => {
-                    await submitCallFeedback(callId, { feedback_type: field.confirm });
-                    setFeedbackHistory((prev) => [
-                      {
-                        feedback_id: `${field.confirm}-${Date.now()}`,
-                        feedback_type: `${field.label} confirmed`,
-                        apply_status: "queued"
-                      },
-                      ...prev
-                    ]);
-                    onFeedback?.(callId);
-                  }}
-                >
-                  OK
-                </button>
-                <button
-                  className="thumb-button thumb-button--flag"
-                  type="button"
-                  title="Mark incorrect"
-                  onClick={async () => {
-                    await submitCallFeedback(callId, { feedback_type: field.type });
-                    setFeedbackHistory((prev) => [
-                      {
-                        feedback_id: `${field.type}-${Date.now()}`,
-                        feedback_type: `${field.label} flagged (queued)`,
-                        apply_status: "queued"
-                      },
-                      ...prev
-                    ]);
-                    onFeedback?.(callId);
-                  }}
-                >
-                  Flag
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="detail-section">
         <h2>Stages</h2>
-        <ul>
+        <ul className="stage-list">
           {(data.stages || []).map((stage) => {
             const label = stage.stage_name || stage.stage;
             return (
               <li key={label} className="stage-item">
                 <span>{label}: {stage.status}</span>
-                <button
-                  className="button small"
-                  type="button"
-                  onClick={async (event) => {
-                    event.stopPropagation();
-                    await retryStage(callId, label);
-                    const refreshed = await getCallDetail(callId);
-                    setData(refreshed);
-                  }}
-                >
-                  Retry
-                </button>
               </li>
             );
           })}
@@ -267,18 +149,6 @@ export function CallDetail({
         {operator.summary || data.summaries?.[0]?.summary_text || "No summary yet."}
       </div>
 
-      <div className="detail-section">
-        <h2>Feedback history</h2>
-        <ul className="evidence-list">
-          {feedbackHistory.length
-            ? feedbackHistory.map((entry, index) => (
-                <li key={entry.feedback_id || index} className="evidence-item">
-                  {entry.feedback_type} {entry.apply_status ? `\u2022 ${entry.apply_status}` : ""}
-                </li>
-              ))
-            : "No feedback yet."}
-        </ul>
-      </div>
     </div>
   );
 }

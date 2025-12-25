@@ -1,5 +1,12 @@
-const { getSummaryMetrics, getTrendBuckets, getHotspots } = require("../../db/queries/summaries");
+const {
+  getSummaryMetrics,
+  getLatestCall,
+  getTrendBuckets,
+  getHotspots
+} = require("../../db/queries/summaries");
 const { listInsightMetrics } = require("../../db/queries/insights");
+const { getRollupById } = require("../../db/queries/rollups");
+const { listTranscriptsForCall } = require("../../db/queries/timeline");
 const { refreshInsights } = require("../../services/insights");
 const { getDigestSummaries } = require("../../services/digest");
 const { parseListFilters, parseUrl } = require("./filters");
@@ -42,9 +49,12 @@ function normalizeSummaryMetrics(metrics) {
 function summaryMetricsHandler(req, res, { db }) {
   const filters = parseListFilters(req);
   const metrics = getSummaryMetrics(db, filters);
+  const latestCall = getLatestCall(db, {});
   const { windowStart, windowEnd } = resolveWindow(filters);
   sendJson(res, 200, {
     ...normalizeSummaryMetrics(metrics),
+    latest_call_source: latestCall?.source_path ?? null,
+    latest_call_seen_at: latestCall?.first_seen_at ?? null,
     window_start: windowStart,
     window_end: windowEnd
   });
@@ -159,10 +169,52 @@ function summaryHotspotsHandler(req, res, { db }) {
   sendJson(res, 200, hotspots);
 }
 
+function parseStatementId(statementId) {
+  const decoded = decodeURIComponent(String(statementId || ""));
+  const parts = decoded.split(":");
+  if (parts[0] !== "rollup" || parts.length < 2) {
+    return null;
+  }
+  return {
+    rollupId: parts[1],
+    lineIndex: parts[3] ? Number(parts[3]) : null
+  };
+}
+
+function summaryEvidenceHandler(req, res, { db, statementId }) {
+  const parsed = parseStatementId(statementId);
+  if (!parsed) {
+    return sendJson(res, 400, { error: "invalid_statement_id" });
+  }
+  const rollup = getRollupById(db, parsed.rollupId);
+  if (!rollup) {
+    return sendJson(res, 404, { error: "summary_not_found" });
+  }
+  const callIds = Array.isArray(rollup.included_call_ids)
+    ? rollup.included_call_ids
+    : [];
+  const evidence = callIds.flatMap((callId) => {
+    const transcripts = listTranscriptsForCall(db, callId);
+    return transcripts.map((transcript) => ({
+      call_id: callId,
+      transcript_id: transcript.transcript_id,
+      created_at: transcript.created_at,
+      text: transcript.text,
+      confidence: transcript.confidence ?? null
+    }));
+  });
+  return sendJson(res, 200, {
+    statement_id: statementId,
+    rollup_id: rollup.rollup_id,
+    evidence
+  });
+}
+
 module.exports = {
   summaryMetricsHandler,
   summaryInsightsHandler,
   summaryDigestHandler,
   summaryTrendsHandler,
-  summaryHotspotsHandler
+  summaryHotspotsHandler,
+  summaryEvidenceHandler
 };

@@ -170,8 +170,8 @@ function getSummaryMetrics(db, filters = {}) {
   const incidentCounts = incidentResults.items.reduce(
     (acc, incident) => {
       const lastActivity =
-        incident.last_activity_at ||
         incident.last_call_at ||
+        incident.last_activity_at ||
         incident.last_rollup_at ||
         incident.updated_at;
       if (!lastActivity) {
@@ -204,6 +204,15 @@ function getSummaryMetrics(db, filters = {}) {
     call_resolved_count: resolvedCalls,
     re_alert_calls: reAlertCalls
   };
+}
+
+function getLatestCall(db, filters = {}) {
+  const callFilter = buildCallFilterSql(filters);
+  return db
+    .prepare(
+      `SELECT calls.source_path, calls.first_seen_at FROM calls ${callFilter.joins} ${callFilter.where} ORDER BY calls.first_seen_at DESC LIMIT 1`
+    )
+    .get(...callFilter.params);
 }
 
 function getTrendBuckets(db, { start, end, bucketMinutes = 60, ...filters } = {}) {
@@ -298,6 +307,7 @@ module.exports = {
   listSummariesForCall,
   listSummariesForIncident,
   getSummaryMetrics,
+  getLatestCall,
   getTrendBuckets,
   getHotspots
 };

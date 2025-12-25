@@ -9,7 +9,7 @@ import {
 import { FilterPanel } from "./FilterPanel";
 import { fetchSummaryMetrics } from "../../api";
 
-function TopMetrics({ filters, refreshToken }) {
+function TopMetrics({ filters, refreshToken, onMetrics }) {
   const [metrics, setMetrics] = useState(null);
 
   useEffect(() => {
@@ -19,9 +19,15 @@ function TopMetrics({ filters, refreshToken }) {
         const next = await fetchSummaryMetrics({ filters });
         if (!active) return;
         setMetrics(next);
+        if (onMetrics) {
+          onMetrics(next);
+        }
       } catch (_error) {
         if (!active) return;
         setMetrics(null);
+        if (onMetrics) {
+          onMetrics(null);
+        }
       }
     }
     load();
@@ -34,47 +40,20 @@ function TopMetrics({ filters, refreshToken }) {
     <div className="top-metrics">
       <div className="top-metric">
         <div className="top-metric-label">Incidents</div>
-        <div className="top-metric-value">{metrics?.incident_active_count ?? 0}</div>
+        <div className="top-metric-value">{metrics?.incident_count ?? 0}</div>
       </div>
       <div className="top-metric">
-        <div className="top-metric-label">Calls</div>
-        <div className="top-metric-value">{metrics?.call_active_count ?? 0}</div>
-      </div>
-      <div className="top-metric">
-        <div className="top-metric-label">Resolved</div>
-        <div className="top-metric-value">{metrics?.incident_resolved_count ?? 0}</div>
+        <div className="top-metric-label">Dispatches</div>
+        <div className="top-metric-value">{metrics?.call_count ?? 0}</div>
       </div>
     </div>
   );
 }
 
-export function TopFilterBar({ filters, onChange, refreshToken }) {
+export function TopFilterBar({ filters, onChange, refreshToken, onMetrics }) {
   return (
     <div className="top-filter-bar">
-      <div className="top-filter-group">
-        <button
-          className="button small"
-          type="button"
-          onClick={() => onChange(applyRelativeWindow(24))}
-        >
-          Last 24h
-        </button>
-        <button
-          className="button small"
-          type="button"
-          onClick={() => onChange(applyRelativeWindow(24 * 7))}
-        >
-          Last 7d
-        </button>
-        <button
-          className="button small"
-          type="button"
-          onClick={() => onChange(applyRelativeWindow(24 * 30))}
-        >
-          Last 30d
-        </button>
-      </div>
-      <div className="top-filter-group">
+      <div className="top-filter-group top-filter-group--dates">
         <label className="top-filter-field">
           <span className="top-filter-label">Start date</span>
           <input
@@ -97,6 +76,29 @@ export function TopFilterBar({ filters, onChange, refreshToken }) {
             }
           />
         </label>
+      </div>
+      <div className="top-filter-group top-filter-group--controls">
+        <button
+          className="button small"
+          type="button"
+          onClick={() => onChange(applyRelativeWindow(24))}
+        >
+          Last 24h
+        </button>
+        <button
+          className="button small"
+          type="button"
+          onClick={() => onChange(applyRelativeWindow(24 * 7))}
+        >
+          Last 7d
+        </button>
+        <button
+          className="button small"
+          type="button"
+          onClick={() => onChange(applyRelativeWindow(24 * 30))}
+        >
+          Last 30d
+        </button>
         <Popover className="top-filter-popover">
           <Popover.Button className="button small top-filter-trigger" type="button">
             Filters
@@ -106,7 +108,7 @@ export function TopFilterBar({ filters, onChange, refreshToken }) {
           </Popover.Panel>
         </Popover>
       </div>
-      <TopMetrics filters={filters} refreshToken={refreshToken} />
+      <TopMetrics filters={filters} refreshToken={refreshToken} onMetrics={onMetrics} />
     </div>
   );
 }

@@ -16,11 +16,7 @@ function minutesSince(value) {
 }
 
 function deriveBucket(incident) {
-  const updatedAt =
-    incident.last_activity_at ||
-    incident.last_call_at ||
-    incident.last_rollup_at ||
-    incident.updated_at;
+  const updatedAt = incident.last_call_at || incident.updated_at;
   const ageMinutes = minutesSince(updatedAt);
   if (ageMinutes === null) {
     return { bucket: "active", label: "Active", ageMinutes: null };
@@ -38,7 +34,7 @@ function buildTags(incident) {
   const tags = [];
   const memberCount = incident.member_count ?? 0;
   const reAlertCount = incident.re_alert_count ?? 0;
-  const updatedAt = incident.last_rollup_at || incident.updated_at;
+  const updatedAt = incident.last_call_at || incident.updated_at;
   const ageMinutes = minutesSince(updatedAt);
 
   if (ageMinutes !== null) {
@@ -297,12 +293,7 @@ export function IncidentsBoard({ filters, onSelect, onSelectCall, refreshToken }
             <ul className="incident-list">
               {(buckets[bucketDef.key] || []).map((incident) => {
                 const address = incident.address || incident.town || "No address";
-                const updatedAt =
-                  incident.last_activity_at ||
-                  incident.last_call_at ||
-                  incident.last_rollup_at ||
-                  incident.updated_at ||
-                  "n/a";
+                const updatedAt = incident.last_call_at || incident.updated_at || "n/a";
                 const memberCount = incident.member_count ?? 0;
                 const reAlertCount = incident.re_alert_count ?? 0;
                 const summary = incident.latest_summary || "No rollup summary yet.";

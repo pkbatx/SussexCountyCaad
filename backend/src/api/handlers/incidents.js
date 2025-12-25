@@ -12,6 +12,7 @@ const {
   buildConfidenceSignal,
   summarizeLinkReason
 } = require("../../services/confidence");
+const { getIncidentTimeline } = require("../../services/timeline");
 
 function sendJson(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -201,7 +202,17 @@ async function incidentDetailHandler(req, res, { db, incidentId }) {
   });
 }
 
+function incidentTimelineHandler(req, res, { db, incidentId }) {
+  const incident = getIncidentById(db, incidentId);
+  if (!incident) {
+    return sendJson(res, 404, { error: "incident_not_found" });
+  }
+  const timeline = getIncidentTimeline(db, incidentId);
+  return sendJson(res, 200, timeline);
+}
+
 module.exports = {
   listIncidentsHandler,
-  incidentDetailHandler
+  incidentDetailHandler,
+  incidentTimelineHandler
 };

@@ -28,11 +28,16 @@ const {
   summaryTrendsHandler,
   summaryHotspotsHandler
 } = require("./handlers/summary");
+const { handleTimelineRoutes } = require("./routes");
 
 function startApiServer({ config, db, pipeline }) {
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/api/health") {
       return healthHandler(req, res);
+    }
+
+    if (handleTimelineRoutes(req, res, { db })) {
+      return;
     }
 
     if (req.method === "GET" && req.url.startsWith("/api/calls")) {

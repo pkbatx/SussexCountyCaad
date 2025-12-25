@@ -19,6 +19,8 @@ Auto-generated from all feature plans. Last updated: 2025-12-20
 - SQLite database via backend; read-only calls directory for audio assets (001-react-headless-ui)
 - Node.js 20 (backend), React 18 + Vite (frontend) + better-sqlite3, ajv, dotenv, mapbox-gl, (002-incident-cohesion-ui)
 - Local SQLite (`/Users/pbuch/SussexCountyCaad/runtime/data/caad.sqlite`) (002-incident-cohesion-ui)
+- JavaScript (Node.js 20 backend, Vite + React frontend) + Backend: better-sqlite3, ajv, dotenv. Frontend: Vite, mapbox-gl, headlessui. Waveform: WaveSurfer.js. (011-incident-timeline-ui)
+- SQLite database for incident/call metadata; local filesystem for audio/transcripts. (011-incident-timeline-ui)
 
 - JavaScript (Node.js 20 LTS) for backend; vanilla JS for UI + Vite (UI), SQLite driver (better-sqlite3), Ajv (JSON schema validation) (001-define-caad-core)
 
@@ -38,9 +40,9 @@ npm test && npm run lint
 JavaScript (Node.js 20 LTS) for backend; vanilla JS for UI: Follow standard conventions
 
 ## Recent Changes
+- 011-incident-timeline-ui: Added JavaScript (Node.js 20 backend, Vite + React frontend) + Backend: better-sqlite3, ajv, dotenv. Frontend: Vite, mapbox-gl, headlessui. Waveform: WaveSurfer.js.
 - 002-incident-cohesion-ui: Added Node.js 20 (backend), React 18 + Vite (frontend) + better-sqlite3, ajv, dotenv, mapbox-gl,
 - 001-react-headless-ui: Added JavaScript (Node.js >= 20 backend, browser React frontend) + Vite, React, Headless UI, mapbox-gl; backend uses better-sqlite3, ajv, dotenv
-- 010-realtime-pipeline-ui: Added Node.js 20 (backend) + browser JavaScript (frontend) + better-sqlite3, ajv, dotenv (backend); Vite, mapbox-gl (frontend)
 
 
 <!-- MANUAL ADDITIONS START -->

@@ -78,8 +78,25 @@ function getLatestRollupForIncident(db, incidentId) {
   };
 }
 
+function getRollupById(db, rollupId) {
+  const row = db
+    .prepare("SELECT * FROM incident_rollups WHERE rollup_id = ?")
+    .get(rollupId);
+  if (!row) {
+    return null;
+  }
+  return {
+    ...row,
+    latest_update: JSON.parse(row.latest_update_json),
+    key_fields: JSON.parse(row.key_fields_json),
+    open_questions: JSON.parse(row.open_questions_json),
+    included_call_ids: JSON.parse(row.included_call_ids_json)
+  };
+}
+
 module.exports = {
   createIncidentRollup,
   listRollupsForIncident,
-  getLatestRollupForIncident
+  getLatestRollupForIncident,
+  getRollupById
 };
