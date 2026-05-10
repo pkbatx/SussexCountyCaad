@@ -1,31 +1,33 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { AppLayout } from "./components/layout/AppLayout";
+import React, { useCallback, useState } from "react";
+import { HeaderBar } from "./components/layout/HeaderBar";
+import { LeftRail } from "./components/layout/LeftRail";
 import { TopFilterBar } from "./components/filters/TopFilterBar";
 import { DigestColumn } from "./components/summary/DigestColumn";
-import { IncidentsBoard } from "./components/incidents/IncidentsBoard";
+import { IncidentsBoardDense } from "./components/incidents/IncidentsBoardDense";
 import { CallDetail } from "./components/details/CallDetail";
 import { IncidentDetail } from "./components/details/IncidentDetail";
 import { MapView } from "./components/map/MapView";
-import { NotificationsView } from "./components/notifications/NotificationsView";
+import { NotificationFeed } from "./components/notifications/NotificationFeed";
 import { createDefaultFilters, updateFilters } from "./state/filters";
 import { useHashRoute } from "./hooks/useHashRoute";
 import { useSseStatus } from "./hooks/useSseStatus";
 import { useDetailCache } from "./hooks/useDetailCache";
 import { useMapViewState } from "./hooks/useMapViewState";
-import { formatDateTime24, parseFilenameTimestamp } from "./state/formatting";
 
 export function App() {
   const [filters, setFilters] = useState(createDefaultFilters);
   const [route, setRoute] = useHashRoute("incidents");
   const [refreshToken, setRefreshToken] = useState(0);
   const [returnRoute, setReturnRoute] = useState("incidents");
-  const [summaryMetrics, setSummaryMetrics] = useState(null);
+  const [activeIncidents, setActiveIncidents] = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(Date.now());
 
-  const handleRefresh = useCallback(() => setRefreshToken(Date.now()), []);
-  const { status: sseStatus } = useSseStatus({
-    onRefresh: handleRefresh
-  });
+  const handleRefresh = useCallback(() => {
+    setRefreshToken(Date.now());
+    setLastRefresh(Date.now());
+  }, []);
 
+  const { status: sseStatus } = useSseStatus({ onRefresh: handleRefresh });
   const { invalidateIncident, clearAll } = useDetailCache();
   const { viewState, updateViewState } = useMapViewState();
 
@@ -33,44 +35,9 @@ export function App() {
     (next) => {
       setFilters((prev) => updateFilters(prev, next));
       clearAll();
-      setRefreshToken(Date.now());
+      handleRefresh();
     },
-    [clearAll]
-  );
-
-  const handleMetrics = useCallback((next) => {
-    setSummaryMetrics(next);
-  }, []);
-
-  const lastCallTime = useMemo(() => {
-    if (!summaryMetrics) return null;
-    const fromFilename = parseFilenameTimestamp(summaryMetrics.latest_call_source);
-    if (fromFilename) return fromFilename;
-    if (summaryMetrics.latest_call_seen_at) {
-      const parsed = new Date(summaryMetrics.latest_call_seen_at);
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed;
-      }
-    }
-    return null;
-  }, [summaryMetrics]);
-
-  const nav = (
-    <div className="last-call-pill">
-      <span className="last-call-label">Last call</span>
-      <span className="last-call-value">
-        {lastCallTime ? formatDateTime24(lastCallTime) : "Unknown"}
-      </span>
-    </div>
-  );
-
-  const topbar = (
-    <TopFilterBar
-      filters={filters}
-      onChange={applyFilters}
-      refreshToken={refreshToken}
-      onMetrics={handleMetrics}
-    />
+    [clearAll, handleRefresh]
   );
 
   const navigateToCall = useCallback(
@@ -93,113 +60,92 @@ export function App() {
     [navigateToCall, setRoute]
   );
 
-  const mapPanel = (
-    <MapView
-      filters={filters}
-      refreshToken={refreshToken}
-      viewState={viewState}
-      onViewState={updateViewState}
-      onModeChange={(next) => applyFilters({ mapMode: next })}
-      onSelect={handleMapSelect}
-    />
-  );
-
-  const rightColumn = (
-    <div className="ops-right-stack">
-      {mapPanel}
-      <DigestColumn filters={filters} refreshToken={refreshToken} />
-    </div>
-  );
-
-  if (route.startsWith("call/")) {
-    const callId = route.split("/")[1];
+  const renderCenter = () => {
+    if (route.startsWith("call/")) {
+      const callId = route.split("/")[1];
+      return (
+        <CallDetail
+          callId={callId}
+          prefetched={null}
+          onBack={() => setRoute(returnRoute || "incidents")}
+        />
+      );
+    }
+    if (route.startsWith("incident/")) {
+      const incidentId = route.split("/")[1];
+      return (
+        <IncidentDetail
+          incidentId={incidentId}
+          prefetched={null}
+          onBack={() => setRoute("incidents")}
+          onFeedback={invalidateIncident}
+          onSelectCall={navigateToCall}
+          refreshToken={refreshToken}
+        />
+      );
+    }
+    if (route === "notifications") {
+      return <NotificationFeed refreshToken={refreshToken} />;
+    }
     return (
-      <AppLayout
-        title="Call Detail"
-        left={null}
-        center={
-          <CallDetail
-            callId={callId}
-            prefetched={null}
-            onBack={() => setRoute(returnRoute || "incidents")}
-          />
-        }
-        right={rightColumn}
-        summary={null}
-        topbar={topbar}
-        footer={null}
-        sseStatus={{ status: sseStatus }}
-        nav={nav}
-        layout="ops"
-        centerSpan="two"
+      <IncidentsBoardDense
+        filters={filters}
+        refreshToken={refreshToken}
+        onActiveCountChange={setActiveIncidents}
+        onSelect={(incidentId) => setRoute(`incident/${incidentId}`)}
+        onSelectCall={navigateToCall}
       />
     );
-  }
+  };
 
-  if (route.startsWith("incident/")) {
-    const incidentId = route.split("/")[1];
-    return (
-      <AppLayout
-        title="Incident Detail"
-        left={null}
-        center={
-          <IncidentDetail
-            incidentId={incidentId}
-            prefetched={null}
-            onBack={() => setRoute("incidents")}
-            onFeedback={invalidateIncident}
-            onSelectCall={navigateToCall}
-            refreshToken={refreshToken}
-          />
-        }
-        right={rightColumn}
-        summary={null}
-        topbar={topbar}
-        footer={null}
-        sseStatus={{ status: sseStatus }}
-        nav={nav}
-        layout="ops"
-        centerSpan="two"
-      />
-    );
-  }
-
-  if (route === "notifications") {
-    return (
-      <AppLayout
-        title="Notifications"
-        left={null}
-        center={<NotificationsView />}
-        right={null}
-        summary={null}
-        topbar={topbar}
-        footer={null}
-        sseStatus={{ status: sseStatus }}
-        nav={nav}
-      />
-    );
-  }
+  // IncidentDetail owns its own embedded map in the right two-thirds of the
+  // center pane, so we suppress the right rail for that route. Notifications
+  // also hide the rail.
+  const showRightRail = route !== "notifications" && !route.startsWith("incident/");
+  const isDetailRoute = route.startsWith("call/") || route.startsWith("incident/");
 
   return (
-    <AppLayout
-      title={null}
-      left={null}
-      center={
-        <IncidentsBoard
-          filters={filters}
+    <div className="tactical-shell">
+      <HeaderBar
+        sseStatus={sseStatus}
+        lastRefresh={lastRefresh}
+        activeIncidentCount={activeIncidents}
+      />
+      <div className="tactical-body" style={{ gridTemplateColumns: showRightRail ? "240px 1fr 320px" : "240px 1fr" }}>
+        <LeftRail
+          route={route}
+          setRoute={setRoute}
+          activeIncidents={activeIncidents}
           refreshToken={refreshToken}
-          onSelect={(incidentId) => setRoute(`incident/${incidentId}`)}
-          onSelectCall={navigateToCall}
         />
-      }
-      right={rightColumn}
-      summary={null}
-      topbar={topbar}
-      footer={null}
-      sseStatus={{ status: sseStatus }}
-      nav={nav}
-      layout="ops"
-      centerSpan="two"
-    />
+        <main className="tactical-center" style={isDetailRoute ? { display: "flex", flexDirection: "column", minHeight: 0 } : undefined}>
+          {isDetailRoute ? null : (
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+              <TopFilterBar
+                filters={filters}
+                onChange={applyFilters}
+                refreshToken={refreshToken}
+                onMetrics={() => {}}
+              />
+            </div>
+          )}
+          {renderCenter()}
+        </main>
+        {showRightRail ? (
+          <aside className="tactical-rail tactical-rail--right">
+            <MapView
+              mode="global"
+              filters={filters}
+              refreshToken={refreshToken}
+              viewState={viewState}
+              onViewState={updateViewState}
+              onModeChange={(next) => applyFilters({ mapMode: next })}
+              onSelect={handleMapSelect}
+            />
+            <DigestColumn filters={filters} refreshToken={refreshToken} />
+          </aside>
+        ) : null}
+      </div>
+    </div>
   );
 }

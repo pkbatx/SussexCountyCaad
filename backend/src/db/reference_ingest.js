@@ -3,6 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { normalizeKey } = require("./queries/reference_data");
 const { createAIAdapter } = require("../ai/adapter");
+const log = require("../services/logger");
 const {
   listReferenceEmbeddings,
   upsertReferenceEmbedding
@@ -49,8 +50,9 @@ function resolveReferencePath(configPath, fallbackPath) {
   }
   if (fallbackPath && fs.existsSync(fallbackPath)) {
     if (normalized && normalized !== fallbackPath) {
-      console.warn(
-        `[reference] fallback to ${fallbackPath} (missing ${normalized})`
+      log.warn(
+        { fallbackPath, normalized },
+        "reference fallback path"
       );
     }
     return fallbackPath;
@@ -230,7 +232,7 @@ async function indexReferenceEmbeddings({ db, config, records }) {
         });
       });
     } catch (error) {
-      console.warn(`[reference] embeddings failed: ${error.message}`);
+      log.warn({ err: error }, "reference embeddings failed");
       return;
     }
   }
@@ -253,14 +255,14 @@ async function ingestReferenceData({ db, config }) {
   const streetData = loadJson(streetPath);
 
   if (poiPath && !poiData) {
-    console.warn(`[reference] POI file not found: ${poiPath}`);
+    log.warn({ poiPath }, "reference POI file not found");
   }
   if (streetPath && !streetData) {
-    console.warn(`[reference] street/town file not found: ${streetPath}`);
+    log.warn({ streetPath }, "reference street/town file not found");
   }
 
   if (!poiData && !streetData) {
-    console.warn("[reference] no reference data files found");
+    log.warn("no reference data files found");
     return;
   }
 
