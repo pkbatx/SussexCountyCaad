@@ -1,141 +1,124 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchMapPoints } from "../../api";
-import { createMapAdapter } from "./map-adapter";
+import { useMapbox } from "../../hooks/useMapbox";
 import {
-  DEFAULT_ZOOM,
   MAPBOX_ACCESS_TOKEN,
-  MAPBOX_STYLE,
-  SUSSEX_BOUNDS,
-  SUSSEX_CENTER
+  SUSSEX_BOUNDS
 } from "../../config";
 import { MapModeToggle } from "./MapModeToggle";
 
+// MapView has two modes:
+//   mode="global"    — full set of map points fetched via /api/map/points,
+//                      driven by `filters` and the markers/heatmap toggle.
+//                      Marker mode uses Mapbox source clustering at zoom <=10.
+//   mode="incident"  — embedded inside IncidentDetail. Filters
+//                      /api/map/points client-side to the incident's
+//                      member call_ids, flies to the centroid on mount,
+//                      and renders a pulse marker for active incidents.
+
 export function MapView({
+  mode = "global",
   filters,
   onSelect,
   viewState,
   onViewState,
   onModeChange,
-  refreshToken
+  refreshToken,
+  // incident-mode props
+  incident,
+  memberCallIds,
+  isActive
 }) {
   const containerRef = useRef(null);
-  const adapterRef = useRef(null);
-  const unsubscribeRef = useRef(null);
-  const [status, setStatus] = useState("");
-  const [mode, setMode] = useState(filters.mapMode || "markers");
+  const onSelectRef = useRef(onSelect);
   const onViewStateRef = useRef(onViewState);
+  const [status, setStatus] = useState("");
+  const [renderMode, setRenderMode] = useState(filters?.mapMode || "markers");
+  const effectiveMode = filters?.mapMode || renderMode;
 
-  const effectiveMode = filters.mapMode || mode;
+  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+  useEffect(() => { onViewStateRef.current = onViewState; }, [onViewState]);
 
-  const refresh = useCallback(
-    async (nextMode) => {
-      const activeMode = nextMode || effectiveMode;
-      setStatus("");
-      if (!adapterRef.current) return;
+  const handleViewChange = useCallback((next) => {
+    onViewStateRef.current?.({ ...next, hasUserView: true });
+  }, []);
+
+  const adapter = useMapbox({
+    containerRef,
+    viewState: mode === "incident" ? null : viewState,
+    onViewChange: mode === "global" ? handleViewChange : undefined,
+    fitBoundsOnInit: mode === "global"
+  });
+
+  // Refresh the source data based on mode.
+  useEffect(() => {
+    if (!adapter) return;
+
+    let cancelled = false;
+    setStatus("");
+
+    async function load() {
       try {
         const response = await fetchMapPoints({
-          filters,
-          mode: activeMode,
-          entity: "both"
+          filters: filters || {},
+          mode: mode === "incident" ? "markers" : effectiveMode,
+          entity: mode === "incident" ? "call" : "both"
         });
-        adapterRef.current.setMode(activeMode);
-        if (activeMode === "heatmap") {
-          adapterRef.current.setHeatmap(response.points || []);
-        } else {
-          adapterRef.current.setMarkers(response.points || [], { onSelect });
+        if (cancelled) return;
+        let points = response.points || [];
+
+        if (mode === "incident" && Array.isArray(memberCallIds) && memberCallIds.length > 0) {
+          const memberSet = new Set(memberCallIds);
+          points = points.filter((p) => memberSet.has(p.entity_id));
         }
-        if (response.truncated) {
+
+        adapter.setMode(mode === "incident" ? "markers" : effectiveMode);
+        if (mode !== "incident" && effectiveMode === "heatmap") {
+          adapter.setHeatmap(points);
+        } else {
+          adapter.setMarkers(points, { onSelect: onSelectRef.current });
+        }
+
+        if (mode === "incident" && points.length > 0) {
+          const lat = points.reduce((s, p) => s + p.latitude, 0) / points.length;
+          const lng = points.reduce((s, p) => s + p.longitude, 0) / points.length;
+          adapter.flyTo(lat, lng, 14);
+          if (isActive) {
+            adapter.setPulseMarker(lat, lng);
+          } else {
+            adapter.clearPulseMarker();
+          }
+        } else if (mode === "incident") {
+          adapter.clearPulseMarker();
+          setStatus("No geocoded calls for this incident.");
+        } else if (response.truncated) {
           setStatus("Map truncated for performance. Narrow filters to see more.");
-        } else if (!response.points || response.points.length === 0) {
+        } else if (points.length === 0) {
           setStatus("No map points for current filters.");
         }
       } catch (error) {
-        setStatus(`Map unavailable: ${error.message}`);
+        if (!cancelled) setStatus(`Map unavailable: ${error.message}`);
       }
-    },
-    [filters, onSelect, effectiveMode]
-  );
+    }
 
-  const scheduleResize = useCallback(() => {
-    const resize = () => {
-      if (typeof adapterRef.current?.map?.resize === "function") {
-        adapterRef.current.map.resize();
-      } else if (typeof adapterRef.current?.map?.invalidateSize === "function") {
-        adapterRef.current.map.invalidateSize();
-      }
-    };
-    requestAnimationFrame(() => requestAnimationFrame(resize));
-    setTimeout(resize, 100);
-  }, []);
+    load();
+    return () => { cancelled = true; };
+  }, [adapter, mode, effectiveMode, filters, refreshToken, memberCallIds, isActive]);
+
+  useEffect(() => {
+    if (filters?.mapMode && filters.mapMode !== renderMode) {
+      setRenderMode(filters.mapMode);
+    }
+  }, [filters?.mapMode, renderMode]);
 
   const handleReset = useCallback(() => {
-    if (!adapterRef.current) return;
-    adapterRef.current.setBounds(SUSSEX_BOUNDS);
-  }, []);
+    adapter?.setBounds(SUSSEX_BOUNDS);
+  }, [adapter]);
 
-  useEffect(() => {
-    onViewStateRef.current = onViewState;
-  }, [onViewState]);
-
-  useEffect(() => {
-    if (!MAPBOX_ACCESS_TOKEN || !containerRef.current || adapterRef.current) return;
-
-    const initialCenter = viewState?.center || SUSSEX_CENTER;
-    const initialZoom =
-      typeof viewState?.zoom === "number" ? viewState.zoom : DEFAULT_ZOOM;
-    const shouldFitBounds = !viewState?.hasUserView;
-
-    adapterRef.current = createMapAdapter(containerRef.current, {
-      center: initialCenter,
-      zoom: initialZoom,
-      accessToken: MAPBOX_ACCESS_TOKEN,
-      style: MAPBOX_STYLE
-    });
-
-    if (shouldFitBounds) {
-      adapterRef.current.setBounds(SUSSEX_BOUNDS);
-    }
-
-    unsubscribeRef.current = adapterRef.current.onViewChange((nextView) => {
-      onViewStateRef.current?.({ ...nextView, hasUserView: true });
-    });
-
-    scheduleResize();
-
-    return () => {
-      unsubscribeRef.current?.();
-      adapterRef.current?.destroy?.();
-      adapterRef.current = null;
-    };
-  }, [scheduleResize]);
-
-  useEffect(() => {
-    if (!containerRef.current || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      scheduleResize();
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [scheduleResize]);
-
-  useEffect(() => {
-    const handleResize = () => scheduleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [scheduleResize]);
-
-  useEffect(() => {
-    if (filters.mapMode && filters.mapMode !== mode) {
-      setMode(filters.mapMode);
-    }
-  }, [filters.mapMode, mode]);
-
-  useEffect(() => {
-    if (!adapterRef.current) return;
-    refresh(effectiveMode);
-  }, [refresh, effectiveMode, refreshToken]);
-
-  const panelTitle = useMemo(() => "Geographic Context", []);
+  const panelTitle = useMemo(
+    () => (mode === "incident" ? "Incident Geography" : "Geographic Context"),
+    [mode]
+  );
 
   if (!MAPBOX_ACCESS_TOKEN) {
     return (
@@ -150,6 +133,31 @@ export function MapView({
     );
   }
 
+  if (mode === "incident") {
+    return (
+      <div className="incident-map-pane">
+        <div ref={containerRef} className="map-canvas" style={{ position: "absolute", inset: 0 }} />
+        {status ? (
+          <div
+            className="mono"
+            style={{
+              position: "absolute",
+              bottom: 8,
+              left: 8,
+              padding: "4px 8px",
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+              fontSize: 11,
+              color: "var(--text-muted)"
+            }}
+          >
+            {status}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="map-section">
       <div className="panel-title">{panelTitle}</div>
@@ -157,9 +165,8 @@ export function MapView({
         <MapModeToggle
           value={effectiveMode}
           onChange={(next) => {
-            setMode(next);
+            setRenderMode(next);
             onModeChange?.(next);
-            refresh(next);
           }}
         />
         <button className="button small map-reset" type="button" onClick={handleReset}>

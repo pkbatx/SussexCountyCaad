@@ -98,7 +98,11 @@ export function App() {
     );
   };
 
-  const showRightRail = route !== "notifications";
+  // IncidentDetail owns its own embedded map in the right two-thirds of the
+  // center pane, so we suppress the right rail for that route. Notifications
+  // also hide the rail.
+  const showRightRail = route !== "notifications" && !route.startsWith("incident/");
+  const isDetailRoute = route.startsWith("call/") || route.startsWith("incident/");
 
   return (
     <div className="tactical-shell">
@@ -114,20 +118,23 @@ export function App() {
           activeIncidents={activeIncidents}
           refreshToken={refreshToken}
         />
-        <main className="tactical-center">
-          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
-            <TopFilterBar
-              filters={filters}
-              onChange={applyFilters}
-              refreshToken={refreshToken}
-              onMetrics={() => {}}
-            />
-          </div>
+        <main className="tactical-center" style={isDetailRoute ? { display: "flex", flexDirection: "column", minHeight: 0 } : undefined}>
+          {isDetailRoute ? null : (
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+              <TopFilterBar
+                filters={filters}
+                onChange={applyFilters}
+                refreshToken={refreshToken}
+                onMetrics={() => {}}
+              />
+            </div>
+          )}
           {renderCenter()}
         </main>
         {showRightRail ? (
           <aside className="tactical-rail tactical-rail--right">
             <MapView
+              mode="global"
               filters={filters}
               refreshToken={refreshToken}
               viewState={viewState}

@@ -1299,10 +1299,6 @@ a {
   gap: 10px;
 }
 
-.detail-section {
-  margin-top: 16px;
-}
-
 .detail-call-list {
   list-style: none;
   padding: 0;
@@ -1382,22 +1378,6 @@ a {
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
-}
-
-.stage-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.stage-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
 }
 
 .status-badge {
@@ -1482,40 +1462,6 @@ a {
   list-style: none;
   padding: 0;
   margin: 8px 0 0;
-}
-
-.detail-table {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 12px;
-  display: grid;
-  gap: 8px;
-}
-
-.detail-row {
-  display: grid;
-  grid-template-columns: 140px 1fr auto;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface-2);
-}
-
-.detail-label {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.detail-value {
-  color: var(--text);
-  font-size: 13px;
-}
-
-.detail-actions {
-  display: flex;
-  gap: 6px;
 }
 
 .thumb-button {
@@ -1655,17 +1601,6 @@ a {
   gap: 6px;
 }
 
-.call-detail,
-.incident-detail {
-  width: min(100%, 760px);
-  margin-right: auto;
-}
-
-.incident-detail {
-  width: 100%;
-  max-width: 100%;
-}
-
 .detail-title {
   font-weight: 600;
   font-size: 14px;
@@ -1767,25 +1702,7 @@ a {
   margin-top: 12px;
 }
 
-.inline-audio {
-  width: 100%;
-  max-width: 520px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.8);
-}
-
-.incident-timeline-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 16px;
-  align-items: start;
-}
-
-.incident-timeline-shell--single {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.incident-timeline-main {
+.incident-timeline-main--legacy {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2311,10 +2228,6 @@ a {
   }
 
   .incident-board {
-    grid-template-columns: 1fr;
-  }
-
-  .incident-timeline-shell {
     grid-template-columns: 1fr;
   }
 

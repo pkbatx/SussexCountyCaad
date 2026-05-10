@@ -135,11 +135,13 @@ React 18 + Vite, no router (hash-based routing via `useHashRoute` — routes are
 - **Vite config is `vite.config.mjs`** — `@tailwindcss/vite` ships ESM-only and Vite 5 cannot `require()` it from a CJS config.
 - `api.js` — every backend call goes through this module; it builds query strings with `serializeFilters` from `state/filters.js`. Includes `listSignals`, `listNotificationLog` for the agentic corridor and notification feed.
 - `state/` — pure helpers for filters, formatting, playback, timeline. No global store; state is component-local plus a `refreshToken` propagated from `App`.
-- `hooks/` — `useSseStatus` (auto-reconnecting SSE), `useDetailCache` (per-id TTL cache), `useHashRoute`, `useMapViewState`, `useTimelinePolling`, `useSignals` (per-call agentic-loop signals).
+- `hooks/` — `useSseStatus` (auto-reconnecting SSE), `useDetailCache` (per-id TTL cache), `useHashRoute`, `useMapViewState`, `useTimelinePolling`, `useSignals(callId, refreshToken)` (per-call agentic-loop signals from `/api/signals?call_id=…`), `useMapbox({ containerRef, viewState, onViewChange, fitBoundsOnInit })` (shared Mapbox init/cleanup; returns the adapter once `load` fires).
 - `config.js` — Sussex County map defaults, lifecycle windows (`AUTO_RESOLVE_MINUTES`, `MONITOR_WINDOW_MINUTES`), and the `VITE_MAPBOX_*` token wiring.
 - Vite proxies `/api` → `http://localhost:3000`, so the frontend assumes the backend is up on port 3000 in dev.
 
-The dense `IncidentsBoardDense` and `NotificationFeed` are the live components used by `App.jsx`; the legacy `IncidentsBoard` and `NotificationsView` are still in the tree for reference but no route mounts them.
+`MapView` accepts a `mode` prop — `mode="global"` (default) renders the full filter-driven points feed in the right rail with Mapbox source clustering at zoom ≤10 (`cluster: true`, `clusterRadius: 40`); `mode="incident"` is embedded inside `IncidentDetail`'s right two-thirds, fetches `/api/map/points` and filters client-side to the incident's `member_call_ids`, flies to their centroid, and adds a DOM `pulse-marker` (CSS `pulse-ring` keyframe) for active incidents. The right-rail global map is suppressed on `incident/{id}` and `notifications` routes — the incident detail owns its own map. `IncidentDetail` derives per-stage timeline icons from `progress_state` rather than fanning out N `getCallDetail` requests; `CallDetail` renders metadata cards (Call / Location / Confidence / Signals / Stage History) where Location and Confidence cards take an amber border whenever the call has any `ambiguous` pipeline signal.
+
+The dense `IncidentsBoardDense` and `NotificationFeed` are the live components used by `App.jsx`; the legacy `IncidentsBoard` and `NotificationsView` are still in the tree for reference but no route mounts them. Legacy CSS rules tied to the now-redesigned `CallDetail`/`IncidentDetail`/`MapView` panes (`.detail-*`, `.incident-timeline-shell`, `.inline-audio`, `.stage-list`, `.stage-item`, etc.) have been pruned from `legacy-styles.css`; the remaining legacy rules still govern unredesigned components like `TopFilterBar` and `DigestColumn`.
 
 ## Conventions
 
