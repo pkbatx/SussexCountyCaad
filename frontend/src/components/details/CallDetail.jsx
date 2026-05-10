@@ -1,42 +1,59 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getCallDetail } from "../../api";
 import { useSignals } from "../../hooks/useSignals";
+import { StatusBar } from "../layout/StatusBar";
 import { MAPBOX_ACCESS_TOKEN } from "../../config";
 
 function formatTimestamp(value) {
   if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return String(value);
-  return d.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
 }
 
-function classNames(...parts) {
-  return parts.filter(Boolean).join(" ");
+function confidenceColor(score) {
+  if (typeof score !== "number") return "var(--text-muted)";
+  if (score >= 0.8) return "var(--accent-green)";
+  if (score >= 0.6) return "var(--accent-amber)";
+  return "var(--accent-red)";
 }
 
-// --- Audio + word-level transcript ----------------------------------------
+function lowestFieldConfidence(extraction) {
+  const fc = extraction?.field_confidence;
+  if (!fc) return null;
+  const values = Object.values(fc).filter((v) => typeof v === "number");
+  if (!values.length) return null;
+  return Math.min(...values);
+}
+
+function shortId(callId) {
+  const s = String(callId || "");
+  return s.length > 4 ? `${s.slice(0, 4)}…` : s;
+}
 
 function Transcript({ transcript }) {
-  const audioRef = useRef(null);
-  // Audio element lives outside this component; the parent passes the ref via context.
-  // For simplicity we use a global lookup via the audio element id.
   const [activeIndex, setActiveIndex] = useState(-1);
+  const rafRef = useRef(0);
 
   useEffect(() => {
     const audio = document.getElementById("call-detail-audio");
-    if (!audio) return undefined;
-    audioRef.current = audio;
-    if (!Array.isArray(transcript?.words)) return undefined;
-
+    if (!audio || !Array.isArray(transcript?.words)) return undefined;
     const handler = () => {
-      const t = audio.currentTime;
-      const idx = transcript.words.findIndex(
-        (w) => typeof w.start === "number" && typeof w.end === "number" && t >= w.start && t <= w.end
-      );
-      setActiveIndex(idx);
+      if (rafRef.current) return;
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        const t = audio.currentTime;
+        const idx = transcript.words.findIndex(
+          (w) => typeof w.start === "number" && typeof w.end === "number" && t >= w.start && t <= w.end
+        );
+        setActiveIndex(idx);
+      });
     };
     audio.addEventListener("timeupdate", handler);
-    return () => audio.removeEventListener("timeupdate", handler);
+    return () => {
+      audio.removeEventListener("timeupdate", handler);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [transcript]);
 
   if (!transcript?.text) {
@@ -45,155 +62,173 @@ function Transcript({ transcript }) {
 
   if (Array.isArray(transcript.words) && transcript.words.length > 0) {
     return (
-      <div className="transcript">
+      <div className="transcript" aria-live="polite">
         {transcript.words.map((word, i) => (
-          <span key={i} className={classNames("word", i === activeIndex && "word-active")}>
+          <span key={i} className={i === activeIndex ? "word word-active" : "word"}>
             {word.text || word.word || ""}{" "}
           </span>
         ))}
       </div>
     );
   }
-
   return <div className="transcript">{transcript.text}</div>;
 }
 
-// --- Metadata cards --------------------------------------------------------
-
-function CallCard({ call, agency, incidentType, firstSeenLabel }) {
-  return (
-    <div className="meta-card">
-      <div className="meta-card-title">CALL</div>
-      <div className="meta-row"><span className="meta-key">type</span><span>{incidentType || "—"}</span></div>
-      <div className="meta-row"><span className="meta-key">agency</span><span>{agency || "—"}</span></div>
-      <div className="meta-row"><span className="meta-key">received</span><span className="meta-mono">{firstSeenLabel}</span></div>
-      <div className="meta-row"><span className="meta-key">status</span><span>{call?.status || "—"}</span></div>
-    </div>
-  );
-}
-
-function LocationCard({ address, town, lat, lng, isLowConfidence }) {
+function DetailsTray({ location, extractionPayload, stages, signals, signalsCount }) {
+  const { address, town, lat, lng } = location;
   const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
   const staticUrl =
     hasCoords && MAPBOX_ACCESS_TOKEN
       ? `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+3b82f6(${lng},${lat})/${lng},${lat},14,0/200x120@2x?access_token=${MAPBOX_ACCESS_TOKEN}`
       : null;
-  return (
-    <div className={classNames("meta-card", isLowConfidence && "is-low-confidence")}>
-      <div className="meta-card-title">LOCATION</div>
-      <div className="meta-row"><span className="meta-key">address</span><span>{address || "—"}</span></div>
-      <div className="meta-row"><span className="meta-key">town</span><span>{town || "—"}</span></div>
-      {hasCoords ? (
-        <div className="meta-row">
-          <span className="meta-key">coords</span>
-          <span className="meta-mono">{lat.toFixed(5)}, {lng.toFixed(5)}</span>
-        </div>
-      ) : null}
-      {staticUrl ? <img src={staticUrl} alt="map" className="static-map" /> : null}
-    </div>
-  );
-}
 
-function ConfidenceCard({ extraction, isLowConfidence }) {
-  const fc = extraction?.field_confidence || {};
-  const rows = Object.entries(fc)
+  const confidenceRows = Object.entries(extractionPayload?.field_confidence || {})
     .filter(([, v]) => typeof v === "number")
     .sort((a, b) => a[1] - b[1]);
-  if (rows.length === 0) return null;
-  return (
-    <div className={classNames("meta-card", isLowConfidence && "is-low-confidence")}>
-      <div className="meta-card-title">EXTRACTION CONFIDENCE</div>
-      {rows.map(([field, score]) => {
-        const low = score < 0.6;
-        return (
-          <div key={field} className={classNames("meta-row", low && "is-low")}>
-            <span className="meta-key">{low ? "⚠ " : ""}{field}</span>
-            <span className="meta-mono">{score.toFixed(2)}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
-function SignalsCard({ signals }) {
-  if (!signals?.length) return null;
+  const summaryBits = [];
+  if (address || town) summaryBits.push("Location");
+  if (confidenceRows.length) summaryBits.push("Extraction");
+  if (stages?.length) summaryBits.push("Stages");
+  summaryBits.push(`Signals${signalsCount ? ` (${signalsCount})` : ""}`);
+
   return (
-    <div className="meta-card">
-      <div className="meta-card-title">SIGNALS</div>
-      {signals.map((sig) => (
-        <div key={sig.id} style={{ padding: "4px 0", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
-          <span className={`signal-pill signal-pill--${sig.signal}`}>{sig.signal}</span>
-          <span className="meta-mono" style={{ color: "var(--text-muted)" }}>{sig.stage}</span>
-          <span title={sig.reason || ""} style={{ flex: 1, fontSize: 12, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {sig.reason || ""}
-          </span>
+    <details className="details-tray">
+      <summary className="details-tray-summary">
+        <span className="details-tray-label">DETAILS</span>
+        <span className="details-tray-mini">{summaryBits.join(" · ")}</span>
+      </summary>
+      <div className="details-tray-cols">
+        <div className="details-col">
+          <div className="details-col-title">LOCATION</div>
+          {address || town ? (
+            <>
+              <div className="details-row"><span className="k">address</span><span>{address || "—"}</span></div>
+              <div className="details-row"><span className="k">town</span><span>{town || "—"}</span></div>
+              {hasCoords ? (
+                <div className="details-row">
+                  <span className="k">coords</span>
+                  <span className="mono">{lat.toFixed(5)}, {lng.toFixed(5)}</span>
+                </div>
+              ) : null}
+              {staticUrl ? <img src={staticUrl} alt="" className="static-map" /> : null}
+            </>
+          ) : (
+            <div className="details-empty">—</div>
+          )}
         </div>
-      ))}
-    </div>
-  );
-}
 
-function StageHistoryCard({ stages }) {
-  if (!stages?.length) return null;
-  return (
-    <details className="meta-card stage-history">
-      <summary>STAGE HISTORY</summary>
-      <div style={{ marginTop: 8 }}>
-        {stages.map((stage) => {
-          const startedAt = stage.started_at || stage.startedAt;
-          const completedAt = stage.completed_at || stage.completedAt;
-          let delta = "";
-          if (startedAt && completedAt) {
-            const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
-            if (Number.isFinite(ms)) delta = `${ms}ms`;
-          }
-          const status = stage.status;
-          const colorMap = { succeeded: "var(--accent-green)", running: "var(--accent-amber)", failed: "var(--accent-red)" };
-          return (
-            <div key={stage.stage_name || stage.stage} className="meta-row">
-              <span className="meta-key">{stage.stage_name || stage.stage}</span>
-              <span style={{ color: colorMap[status] || "var(--text-muted)", fontFamily: "IBM Plex Mono, monospace", fontSize: 11 }}>
-                {status}{delta ? ` · ${delta}` : ""}
-              </span>
-            </div>
-          );
-        })}
+        <div className="details-col">
+          <div className="details-col-title">EXTRACTION</div>
+          {confidenceRows.length === 0 ? (
+            <div className="details-empty">—</div>
+          ) : (
+            confidenceRows.map(([field, score]) => {
+              const low = score < 0.6;
+              return (
+                <div key={field} className={`details-row ${low ? "is-low" : ""}`}>
+                  <span className="k">{low ? "⚠ " : ""}{field}</span>
+                  <span className="mono">{score.toFixed(2)}</span>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="details-col">
+          <div className="details-col-title">STAGES</div>
+          {!stages?.length ? (
+            <div className="details-empty">—</div>
+          ) : (
+            stages.map((stage) => {
+              const startedAt = stage.started_at || stage.startedAt;
+              const completedAt = stage.completed_at || stage.completedAt;
+              let delta = "";
+              if (startedAt && completedAt) {
+                const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+                if (Number.isFinite(ms)) delta = `${ms}ms`;
+              }
+              const color = { succeeded: "var(--accent-green)", running: "var(--accent-amber)", failed: "var(--accent-red)" }[stage.status] || "var(--text-muted)";
+              return (
+                <div key={stage.stage_name || stage.stage} className="details-row">
+                  <span className="k">{stage.stage_name || stage.stage}</span>
+                  <span className="mono" style={{ color }}>{stage.status}{delta ? ` · ${delta}` : ""}</span>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="details-col">
+          <div className="details-col-title">
+            SIGNALS
+            {signalsCount > 0 ? <span className="details-col-count"> ({signalsCount})</span> : null}
+          </div>
+          {!signals?.length ? (
+            <div className="details-empty">—</div>
+          ) : (
+            signals.map((sig) => (
+              <div key={sig.id} className="details-signal">
+                <span className={`signal-pill signal-pill--${sig.signal}`}>{sig.signal}</span>
+                <span className="signal-reason" title={sig.reason || ""}>{sig.reason || "—"}</span>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </details>
   );
 }
 
-// --- Top-level component ---------------------------------------------------
+function CallSkeleton({ callId, onBack }) {
+  return (
+    <div className="route call-route">
+      <StatusBar
+        onBack={onBack}
+        idLabel="CALL"
+        idShort={shortId(callId)}
+        title="LOADING…"
+        subtitle=""
+      />
+      <div className="skeleton-block call-audio" aria-hidden="true" />
+      <div className="call-transcript">
+        <div className="section-title">TRANSCRIPT</div>
+        <div className="skeleton-lines" aria-hidden="true">
+          <div /><div /><div /><div className="short" /><div />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function CallDetail({ callId, onBack }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const { signals } = useSignals(callId);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    setError("");
     getCallDetail(callId)
       .then((next) => { if (active) setData(next); })
-      .catch((err) => { if (active) setError(`Failed to load call: ${err.message}`); })
+      .catch(() => { if (active) setData(null); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [callId]);
 
-  if (loading) {
+  const extractionPayload = useMemo(() => {
+    const extract = (data?.metadata_extracts || data?.extracts || [])
+      .find((m) => m.schema_version === "extraction.v2");
+    if (!extract?.payload_json) return null;
+    try { return JSON.parse(extract.payload_json); } catch (_err) { return null; }
+  }, [data]);
+
+  if (loading) return <CallSkeleton callId={callId} onBack={onBack} />;
+  if (!data) {
     return (
-      <div style={{ padding: 24, color: "var(--text-muted)", fontFamily: "IBM Plex Mono, monospace" }}>
-        Loading call…
-      </div>
-    );
-  }
-  if (error || !data) {
-    return (
-      <div style={{ padding: 24, color: "var(--accent-red)", fontFamily: "IBM Plex Mono, monospace" }}>
-        {error || "Call not found."}
+      <div className="route call-route">
+        <StatusBar onBack={onBack} idLabel="CALL" idShort={shortId(callId)} title="NOT FOUND" />
+        <div className="empty-state">CALL NOT FOUND</div>
       </div>
     );
   }
@@ -201,24 +236,43 @@ export function CallDetail({ callId, onBack }) {
   const operator = data.operator_fields || {};
   const transcript = data.transcripts?.[0] || null;
   const audioUrl = data.audio?.url || null;
-  const extracts = data.metadata_extracts || data.extracts || [];
-  const extraction = extracts.find((m) => m.schema_version === "extraction.v2");
-  let extractionPayload = null;
-  if (extraction?.payload_json) {
-    try {
-      extractionPayload = JSON.parse(extraction.payload_json);
-    } catch (_err) { /* ignore */ }
+  const lowestConf = lowestFieldConfidence(extractionPayload);
+  const signalsCount = signals.length;
+
+  const subtitleParts = [
+    formatTimestamp(data.call?.first_seen_at),
+    operator.agency || data.call?.agency_name || "—"
+  ];
+  if (typeof lowestConf === "number") {
+    subtitleParts.push(
+      <span key="conf" style={{ color: confidenceColor(lowestConf) }}>
+        conf {lowestConf.toFixed(2)}
+      </span>
+    );
+  }
+  if (signalsCount > 0) {
+    subtitleParts.push(
+      <span key="sig" style={{ color: "var(--accent-amber)" }}>⚠ {signalsCount} signal{signalsCount === 1 ? "" : "s"}</span>
+    );
   }
 
-  const ambiguous = signals.some((s) => s.signal === "ambiguous");
+  const subtitle = subtitleParts.flatMap((part, i) =>
+    i === 0 ? [part] : [<span key={`sep-${i}`} className="status-bar-sep">·</span>, part]
+  );
+
   const firstLocation = data.locations?.[0];
-  const lat = firstLocation?.latitude;
-  const lng = firstLocation?.longitude;
 
   return (
-    <div className="call-split">
-      <div className="call-left">
-        <button className="call-back" type="button" onClick={onBack}>◀ BACK</button>
+    <div className="route call-route">
+      <StatusBar
+        onBack={onBack}
+        idLabel="CALL"
+        idShort={shortId(callId)}
+        title={String(operator.incident_type || "CALL").toUpperCase()}
+        subtitle={<span className="status-bar-subtitle-line">{subtitle}</span>}
+      />
+
+      <div className="call-audio">
         {audioUrl ? (
           <audio
             id="call-detail-audio"
@@ -228,29 +282,27 @@ export function CallDetail({ callId, onBack }) {
             src={audioUrl}
           />
         ) : (
-          <div className="transcript transcript--empty">Audio unavailable.</div>
+          <div className="empty-state empty-state--inline">AUDIO UNAVAILABLE</div>
         )}
+      </div>
+
+      <div className="call-transcript">
+        <div className="section-title">TRANSCRIPT</div>
         <Transcript transcript={transcript} />
       </div>
 
-      <div className="call-right">
-        <CallCard
-          call={data.call}
-          agency={operator.agency}
-          incidentType={operator.incident_type}
-          firstSeenLabel={formatTimestamp(data.call?.first_seen_at)}
-        />
-        <LocationCard
-          address={operator.address}
-          town={operator.town}
-          lat={lat}
-          lng={lng}
-          isLowConfidence={ambiguous}
-        />
-        <ConfidenceCard extraction={extractionPayload} isLowConfidence={ambiguous} />
-        <SignalsCard signals={signals} />
-        <StageHistoryCard stages={data.stages} />
-      </div>
+      <DetailsTray
+        location={{
+          address: operator.address,
+          town: operator.town,
+          lat: firstLocation?.latitude,
+          lng: firstLocation?.longitude
+        }}
+        extractionPayload={extractionPayload}
+        stages={data.stages}
+        signals={signals}
+        signalsCount={signalsCount}
+      />
     </div>
   );
 }

@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { listIncidents } from "../../api";
 import { AUTO_RESOLVE_MINUTES } from "../../config";
 import { formatIsoSecond } from "../../state/formatting";
+import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 
 function minutesSince(value) {
   if (!value) return null;
@@ -13,13 +14,9 @@ function minutesSince(value) {
 function statusFor(incident) {
   if (incident.status === "failed") return { kind: "failed", label: "FAILED" };
   const flags = incident.data_quality_flags || incident.key_fields?.data_quality_flags;
-  if (Array.isArray(flags) && flags.length) {
-    return { kind: "ambiguous", label: "AMBIGUOUS" };
-  }
+  if (Array.isArray(flags) && flags.length) return { kind: "ambiguous", label: "AMBIGUOUS" };
   const age = minutesSince(incident.last_call_at || incident.updated_at);
-  if (age !== null && age >= AUTO_RESOLVE_MINUTES) {
-    return { kind: "resolved", label: "RESOLVED" };
-  }
+  if (age !== null && age >= AUTO_RESOLVE_MINUTES) return { kind: "resolved", label: "RESOLVED" };
   return { kind: "active", label: "ACTIVE" };
 }
 
@@ -30,30 +27,55 @@ function locationSummary(incident) {
   return parts.join(", ");
 }
 
-export function IncidentsBoardDense({ filters, refreshToken, onSelect, onActiveCountChange, onSelectCall }) {
+const IncidentRow = memo(function IncidentRow({ incident, isSelected, onSelect, rowRef }) {
+  const status = statusFor(incident);
+  return (
+    <tr
+      ref={rowRef}
+      key={incident.incident_id}
+      className={isSelected ? "is-selected" : ""}
+      onClick={() => onSelect(incident.incident_id)}
+    >
+      <td className="mono">{formatIsoSecond(incident.last_call_at || incident.updated_at)}</td>
+      <td className="mono">{String(incident.incident_id).slice(0, 8)}</td>
+      <td>{incident.incident_type || incident.top_call_type || "—"}</td>
+      <td>{locationSummary(incident)}</td>
+      <td className="mono" style={{ textAlign: "right" }}>{incident.member_count ?? 0}</td>
+      <td>
+        <span className={`status-pill status-pill--${status.kind}`} aria-label={status.label.toLowerCase()}>
+          {status.kind === "ambiguous" ? "⚠ " : ""}
+          {status.label}
+        </span>
+      </td>
+    </tr>
+  );
+});
+
+function IncidentRowsSkeleton() {
+  return Array.from({ length: 4 }).map((_, i) => (
+    <tr key={i} className="skeleton-row" aria-hidden="true">
+      <td colSpan={6}><div className="skeleton-bar" /></td>
+    </tr>
+  ));
+}
+
+export function IncidentsBoardDense({ filters, refreshToken, onSelect, onActiveCountChange }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const selectedRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     listIncidents({ filters, limit: 200 })
-      .then((data) => {
-        if (cancelled) return;
-        setItems(data?.items || []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then((data) => { if (!cancelled) setItems(data?.items || []); })
+      .catch(() => { if (!cancelled) setItems([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [filters, refreshToken]);
+
+  useEffect(() => { setSelectedIndex(0); }, [items]);
 
   const activeCount = useMemo(
     () => items.filter((row) => statusFor(row).kind === "active").length,
@@ -64,10 +86,18 @@ export function IncidentsBoardDense({ filters, refreshToken, onSelect, onActiveC
     if (typeof onActiveCountChange === "function") onActiveCountChange(activeCount);
   }, [activeCount, onActiveCountChange]);
 
-  const handleSelect = (incident) => {
-    setSelectedId(incident.incident_id);
-    if (onSelect) onSelect(incident.incident_id);
-  };
+  useKeyboardShortcuts({
+    onNext: () => setSelectedIndex((i) => Math.min(i + 1, Math.max(items.length - 1, 0))),
+    onPrev: () => setSelectedIndex((i) => Math.max(i - 1, 0)),
+    onSelect: () => {
+      const incident = items[selectedIndex];
+      if (incident) onSelect?.(incident.incident_id);
+    }
+  });
+
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: "nearest" });
+  }, [selectedIndex]);
 
   return (
     <div style={{ height: "100%", overflow: "auto" }}>
@@ -80,62 +110,27 @@ export function IncidentsBoardDense({ filters, refreshToken, onSelect, onActiveC
             <th>LOCATION</th>
             <th style={{ width: 60, textAlign: "right" }}>CALLS</th>
             <th style={{ width: 110 }}>STATUS</th>
-            <th style={{ width: 36 }}></th>
           </tr>
         </thead>
         <tbody>
           {loading && items.length === 0 ? (
-            <tr><td colSpan={7} className="mono" style={{ color: "var(--text-muted)", padding: 16 }}>Loading…</td></tr>
+            <IncidentRowsSkeleton />
           ) : items.length === 0 ? (
-            <tr><td colSpan={7} className="mono" style={{ color: "var(--text-muted)", padding: 16 }}>No incidents match the current filters.</td></tr>
+            <tr>
+              <td colSpan={6} className="empty-state empty-state--cell">
+                NO INCIDENTS IN THE LAST 24 HOURS
+              </td>
+            </tr>
           ) : (
-            items.map((incident) => {
-              const status = statusFor(incident);
-              const isSelected = incident.incident_id === selectedId;
-              const firstCallId = incident.first_call_id || incident.calls?.[0]?.call_id;
-              return (
-                <tr
-                  key={incident.incident_id}
-                  className={isSelected ? "is-selected" : ""}
-                  onClick={() => handleSelect(incident)}
-                >
-                  <td className="mono">{formatIsoSecond(incident.last_call_at || incident.updated_at)}</td>
-                  <td className="mono">{String(incident.incident_id).slice(0, 8)}</td>
-                  <td>{incident.incident_type || incident.top_call_type || "—"}</td>
-                  <td>{locationSummary(incident)}</td>
-                  <td className="mono" style={{ textAlign: "right" }}>{incident.member_count ?? 0}</td>
-                  <td>
-                    <span className={`status-pill status-pill--${status.kind}`}>
-                      {status.kind === "ambiguous" ? "⚠ " : ""}
-                      {status.label}
-                    </span>
-                  </td>
-                  <td>
-                    {firstCallId && onSelectCall ? (
-                      <button
-                        type="button"
-                        title="Play first call"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onSelectCall(firstCallId);
-                        }}
-                        style={{
-                          background: "transparent",
-                          border: "1px solid var(--border)",
-                          color: "var(--text-muted)",
-                          fontFamily: "IBM Plex Mono, monospace",
-                          fontSize: 11,
-                          padding: "2px 6px",
-                          cursor: "pointer"
-                        }}
-                      >
-                        ▶
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              );
-            })
+            items.map((incident, i) => (
+              <IncidentRow
+                key={incident.incident_id}
+                incident={incident}
+                isSelected={i === selectedIndex}
+                onSelect={onSelect}
+                rowRef={i === selectedIndex ? selectedRef : null}
+              />
+            ))
           )}
         </tbody>
       </table>
