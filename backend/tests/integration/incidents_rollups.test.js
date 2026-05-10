@@ -16,17 +16,27 @@ function setupDb() {
   db.exec(loadSql("001_init.sql"));
   db.exec(loadSql("002_rollup_artifacts.sql"));
 
+  const t0 = "2025-12-20T00:00:00.000Z";
+  const t1 = "2025-12-20T01:00:00.000Z";
+
+  db.prepare(
+    "INSERT INTO calls (call_id, source_path, first_seen_at, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run("call-001", "/tmp/call-001.wav", t0, "processing", t0, t0);
+  db.prepare(
+    "INSERT INTO calls (call_id, source_path, first_seen_at, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run("call-002", "/tmp/call-002.wav", t1, "processing", t1, t1);
+
   db.prepare(
     "INSERT INTO incident_groups (incident_id, normalized_address, incident_identifiers, group_confidence, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run("incident-001", "10 Market Street", "[]", 0.8, "2025-12-20T00:00:00.000Z", "2025-12-20T00:00:00.000Z");
+  ).run("incident-001", "10 Market Street", "[]", 0.8, t0, t0);
 
   db.prepare(
     "INSERT INTO stage_runs (run_id, call_id, stage_name, attempt_number, status, started_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run("run-001", "call-001", "incidentSummary", 1, "succeeded", "2025-12-20T00:00:00.000Z");
+  ).run("run-001", "call-001", "incidentSummary", 1, "succeeded", t0);
 
   db.prepare(
     "INSERT INTO stage_runs (run_id, call_id, stage_name, attempt_number, status, started_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run("run-002", "call-002", "incidentSummary", 1, "succeeded", "2025-12-20T01:00:00.000Z");
+  ).run("run-002", "call-002", "incidentSummary", 1, "succeeded", t1);
 
   createIncidentRollup(db, {
     incidentId: "incident-001",

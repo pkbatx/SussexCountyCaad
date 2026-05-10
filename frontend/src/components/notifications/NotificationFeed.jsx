@@ -1,12 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { listNotificationLog } from "../../api";
-
-function formatTs(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toISOString().replace("T", " ").slice(0, 19);
-}
+import { formatIsoSecond } from "../../state/formatting";
 
 function previewOf(payload) {
   if (!payload) return "—";
@@ -60,7 +54,7 @@ export function NotificationFeed({ refreshToken }) {
       setEntries((prev) => [...prev, ...(data?.entries || [])]);
       setOffset((prev) => prev + limit);
     } catch (_err) {
-      // ignore
+      /* noop */
     } finally {
       setLoading(false);
     }
@@ -75,20 +69,23 @@ export function NotificationFeed({ refreshToken }) {
         </div>
       ) : (
         <div>
-          {entries.map((row) => (
-            <div key={row.id} className="notif-row">
-              <span className="ts">{formatTs(row.created_at)}</span>
-              <span className="ch">
-                <span className={`status-pill status-pill--${statusKind(row)}`} style={{ marginRight: 6 }}>
-                  {row.channel}
+          {entries.map((row) => {
+            const preview = previewOf(row.payload);
+            return (
+              <div key={row.id} className="notif-row">
+                <span className="ts">{formatIsoSecond(row.created_at)}</span>
+                <span className="ch">
+                  <span className={`status-pill status-pill--${statusKind(row)}`} style={{ marginRight: 6 }}>
+                    {row.channel}
+                  </span>
                 </span>
-              </span>
-              <span className="msg" title={previewOf(row.payload)}>
-                {previewOf(row.payload)}
-                {row.error ? <span style={{ color: "var(--accent-red)", marginLeft: 8 }}>[{row.error}]</span> : null}
-              </span>
-            </div>
-          ))}
+                <span className="msg" title={preview}>
+                  {preview}
+                  {row.error ? <span style={{ color: "var(--accent-red)", marginLeft: 8 }}>[{row.error}]</span> : null}
+                </span>
+              </div>
+            );
+          })}
           <div style={{ padding: 12, textAlign: "center" }}>
             <button
               type="button"

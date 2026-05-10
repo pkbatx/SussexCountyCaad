@@ -12,9 +12,9 @@ test("grouping summary trims signals and formats explanation", () => {
       confidence: 0.82,
       requires_review: false,
       signals: [
-        { type: "address_match", weight: 0.9 },
-        { type: "time_proximity", weight: 0.7 },
-        { type: "jurisdiction_match", weight: 0.6 }
+        { type: "address_match", value: "10 Market St", weight: 0.9 },
+        { type: "time_proximity", value: "within 5min", weight: 0.7 },
+        { type: "jurisdiction_match", value: "Sussex", weight: 0.6 }
       ]
     },
     2
