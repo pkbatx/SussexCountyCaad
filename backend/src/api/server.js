@@ -10,6 +10,7 @@
 
 const Fastify = require("fastify");
 const fastifyCors = require("@fastify/cors");
+const log = require("../services/logger");
 
 const { healthHandler } = require("./handlers/health");
 const {
@@ -237,7 +238,7 @@ async function startApiServer({ config, db, pipeline }) {
   );
 
   await fastify.listen({ port: config.apiPort, host: "0.0.0.0" });
-  console.log(`[api] listening on ${config.apiPort}`);
+  log.info({ port: config.apiPort }, "api listening");
   return fastify;
 }
 
