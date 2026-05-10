@@ -123,7 +123,7 @@ export function MapView({
   if (!MAPBOX_ACCESS_TOKEN) {
     return (
       <div className="map-section">
-        <div className="panel-title">{panelTitle}</div>
+        <div className="section-title">{panelTitle}</div>
         <div className="map-panel">
           <div className="map-status">
             Mapbox token missing. Set MAPBOX_ACCESS_TOKEN in the root .env file.
@@ -135,32 +135,16 @@ export function MapView({
 
   if (mode === "incident") {
     return (
-      <div className="incident-map-pane">
+      <>
         <div ref={containerRef} className="map-canvas" style={{ position: "absolute", inset: 0 }} />
-        {status ? (
-          <div
-            className="mono"
-            style={{
-              position: "absolute",
-              bottom: 8,
-              left: 8,
-              padding: "4px 8px",
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              fontSize: 11,
-              color: "var(--text-muted)"
-            }}
-          >
-            {status}
-          </div>
-        ) : null}
-      </div>
+        {status ? <div className="map-status map-status--floating">{status}</div> : null}
+      </>
     );
   }
 
   return (
     <div className="map-section">
-      <div className="panel-title">{panelTitle}</div>
+      <div className="section-title">{panelTitle}</div>
       <div className="map-controls-row">
         <MapModeToggle
           value={effectiveMode}
@@ -169,7 +153,7 @@ export function MapView({
             onModeChange?.(next);
           }}
         />
-        <button className="button small map-reset" type="button" onClick={handleReset}>
+        <button className="map-reset-btn" type="button" onClick={handleReset}>
           Reset view
         </button>
       </div>

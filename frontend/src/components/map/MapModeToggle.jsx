@@ -1,5 +1,4 @@
 import React from "react";
-import { RadioGroup } from "@headlessui/react";
 
 const OPTIONS = [
   { value: "markers", label: "Markers" },
@@ -8,18 +7,19 @@ const OPTIONS = [
 
 export function MapModeToggle({ value, onChange }) {
   return (
-    <RadioGroup value={value} onChange={onChange} className="map-controls">
+    <div className="map-mode-toggle" role="radiogroup">
       {OPTIONS.map((option) => (
-        <RadioGroup.Option
+        <button
           key={option.value}
-          value={option.value}
-          as="button"
           type="button"
-          className={({ checked }) => `button small ${checked ? "active" : ""}`}
+          role="radio"
+          aria-checked={value === option.value}
+          className={`map-mode-btn ${value === option.value ? "is-active" : ""}`}
+          onClick={() => onChange(option.value)}
         >
           {option.label}
-        </RadioGroup.Option>
+        </button>
       ))}
-    </RadioGroup>
+    </div>
   );
 }
