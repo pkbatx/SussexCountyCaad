@@ -12,6 +12,7 @@ const {
 } = require("./handlers/incidents");
 const { listAgenciesHandler } = require("./handlers/agencies");
 const { listNotificationsHandler } = require("./handlers/notifications");
+const { listNotificationLogHandler } = require("./handlers/notification_log");
 const { eventsHandler } = require("./handlers/events");
 const { listSignalsHandler } = require("./handlers/signals");
 const {
@@ -73,6 +74,10 @@ function startApiServer({ config, db, pipeline }) {
 
     if (req.method === "GET" && req.url.startsWith("/api/agencies")) {
       return listAgenciesHandler(req, res, { db });
+    }
+
+    if (req.method === "GET" && req.url.startsWith("/api/notifications/log")) {
+      return listNotificationLogHandler(req, res, { db });
     }
 
     if (req.method === "GET" && req.url.startsWith("/api/notifications")) {
