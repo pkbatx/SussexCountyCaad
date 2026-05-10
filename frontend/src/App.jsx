@@ -8,11 +8,14 @@ import { CallDetail } from "./components/details/CallDetail";
 import { IncidentDetail } from "./components/details/IncidentDetail";
 import { MapView } from "./components/map/MapView";
 import { NotificationFeed } from "./components/notifications/NotificationFeed";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { ShortcutsCheatsheet } from "./components/common/ShortcutsCheatsheet";
 import { createDefaultFilters, updateFilters } from "./state/filters";
 import { useHashRoute } from "./hooks/useHashRoute";
 import { useSseStatus } from "./hooks/useSseStatus";
 import { useDetailCache } from "./hooks/useDetailCache";
 import { useMapViewState } from "./hooks/useMapViewState";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
 export function App() {
   const [filters, setFilters] = useState(createDefaultFilters);
@@ -21,6 +24,7 @@ export function App() {
   const [returnRoute, setReturnRoute] = useState("incidents");
   const [activeIncidents, setActiveIncidents] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(Date.now());
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const handleRefresh = useCallback(() => {
     setRefreshToken(Date.now());
@@ -28,7 +32,7 @@ export function App() {
   }, []);
 
   const { status: sseStatus } = useSseStatus({ onRefresh: handleRefresh });
-  const { invalidateIncident, clearAll } = useDetailCache();
+  const { clearAll } = useDetailCache();
   const { viewState, updateViewState } = useMapViewState();
 
   const applyFilters = useCallback(
@@ -42,8 +46,7 @@ export function App() {
 
   const navigateToCall = useCallback(
     (callId) => {
-      const fallbackRoute = route || "incidents";
-      setReturnRoute(fallbackRoute);
+      setReturnRoute(route || "incidents");
       setRoute(`call/${callId}`);
     },
     [route, setRoute]
@@ -51,56 +54,54 @@ export function App() {
 
   const handleMapSelect = useCallback(
     (point) => {
-      if (point.entity_type === "call") {
-        navigateToCall(point.entity_id);
-      } else {
-        setRoute(`incident/${point.entity_id}`);
-      }
+      if (point.entity_type === "call") navigateToCall(point.entity_id);
+      else setRoute(`incident/${point.entity_id}`);
     },
     [navigateToCall, setRoute]
   );
 
+  const handleBack = useCallback(() => {
+    if (route.startsWith("call/")) setRoute(returnRoute || "incidents");
+    else if (route.startsWith("incident/") || route === "notifications") setRoute("incidents");
+  }, [route, returnRoute, setRoute]);
+
+  // App-level keys handle Esc + ? globally. List-level j/k/Enter is owned by
+  // the active list component so it can reach its own selection state.
+  useKeyboardShortcuts({
+    onBack: helpOpen ? () => setHelpOpen(false) : handleBack,
+    onHelp: () => setHelpOpen((prev) => !prev),
+    onSearch: () => {
+      // TODO(perry): wire to the (not-yet-implemented) global search input.
+    }
+  });
+
   const renderCenter = () => {
     if (route.startsWith("call/")) {
       const callId = route.split("/")[1];
-      return (
-        <CallDetail
-          callId={callId}
-          prefetched={null}
-          onBack={() => setRoute(returnRoute || "incidents")}
-        />
-      );
+      return <CallDetail callId={callId} onBack={handleBack} />;
     }
     if (route.startsWith("incident/")) {
       const incidentId = route.split("/")[1];
       return (
         <IncidentDetail
           incidentId={incidentId}
-          prefetched={null}
-          onBack={() => setRoute("incidents")}
-          onFeedback={invalidateIncident}
+          onBack={handleBack}
           onSelectCall={navigateToCall}
           refreshToken={refreshToken}
         />
       );
     }
-    if (route === "notifications") {
-      return <NotificationFeed refreshToken={refreshToken} />;
-    }
+    if (route === "notifications") return <NotificationFeed refreshToken={refreshToken} />;
     return (
       <IncidentsBoardDense
         filters={filters}
         refreshToken={refreshToken}
         onActiveCountChange={setActiveIncidents}
         onSelect={(incidentId) => setRoute(`incident/${incidentId}`)}
-        onSelectCall={navigateToCall}
       />
     );
   };
 
-  // IncidentDetail owns its own embedded map in the right two-thirds of the
-  // center pane, so we suppress the right rail for that route. Notifications
-  // also hide the rail.
   const showRightRail = route !== "notifications" && !route.startsWith("incident/");
   const isDetailRoute = route.startsWith("call/") || route.startsWith("incident/");
 
@@ -129,7 +130,9 @@ export function App() {
               />
             </div>
           )}
-          {renderCenter()}
+          <ErrorBoundary onBack={() => setRoute("incidents")} key={route}>
+            {renderCenter()}
+          </ErrorBoundary>
         </main>
         {showRightRail ? (
           <aside className="tactical-rail tactical-rail--right">
@@ -146,6 +149,7 @@ export function App() {
           </aside>
         ) : null}
       </div>
+      <ShortcutsCheatsheet open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }
