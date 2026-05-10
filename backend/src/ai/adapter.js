@@ -2,30 +2,19 @@ const fs = require("fs");
 const path = require("path");
 
 const SCHEMA_DIR = path.join(__dirname, "schema");
+const schemaCache = new Map();
 
-let metadataSchema = null;
-let groupingSchema = null;
-
-function loadSchemaSync(name) {
-  return JSON.parse(fs.readFileSync(path.join(SCHEMA_DIR, `${name}.json`), "utf8"));
-}
-
-function getMetadataSchema() {
-  if (!metadataSchema) metadataSchema = loadSchemaSync("metadata");
-  return metadataSchema;
-}
-
-function getGroupingSchema() {
-  if (!groupingSchema) groupingSchema = loadSchemaSync("grouping");
-  return groupingSchema;
+function loadSchema(name) {
+  if (!schemaCache.has(name)) {
+    schemaCache.set(name, JSON.parse(fs.readFileSync(path.join(SCHEMA_DIR, `${name}.json`), "utf8")));
+  }
+  return schemaCache.get(name);
 }
 
 const DIGEST_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  properties: {
-    lines: { type: "array", items: { type: "string" } }
-  },
+  properties: { lines: { type: "array", items: { type: "string" } } },
   required: ["lines"]
 };
 
@@ -36,44 +25,36 @@ function getProvider(config) {
   throw new Error(`Unknown AI_PROVIDER: ${name}`);
 }
 
-function getOpenAI() {
-  return require("./providers/openai");
-}
-
 function createAIAdapter({ config }) {
+  // Audio + embeddings always go through OpenAI; Anthropic exposes neither.
+  const openai = require("./providers/openai");
   return {
-    // Audio transcription is OpenAI-only; Anthropic does not expose audio.
     async transcribe(payload) {
-      return getOpenAI().transcribe({ config, ...payload });
+      return openai.transcribe({ config, ...payload });
     },
-
-    // Embeddings are OpenAI-only; Anthropic does not expose embeddings.
     async embedTexts(payload) {
-      return getOpenAI().embedTexts({ config, ...payload });
+      return openai.embedTexts({ config, ...payload });
     },
-
     async extractMetadata({ prompt }) {
       return getProvider(config).complete({
         config,
         systemPrompt:
           "You extract structured incident metadata. Respond with strict JSON only. Use extraction.v2.",
         userPrompt: prompt,
-        schema: getMetadataSchema(),
+        schema: loadSchema("metadata"),
         toolName: "extract_incident_metadata"
       });
     },
-
     async groupIncident({ prompt }) {
       return getProvider(config).complete({
         config,
         systemPrompt:
           "You determine incident grouping. Respond with strict JSON only. Use grouping.v2.",
         userPrompt: prompt,
-        schema: getGroupingSchema(),
+        schema: loadSchema("grouping"),
         toolName: "group_incident"
       });
     },
-
     async summarizeDigest({ prompt }) {
       return getProvider(config).complete({
         config,
@@ -85,7 +66,6 @@ function createAIAdapter({ config }) {
         toolName: "emit_digest_lines"
       });
     },
-
     async summarizeTranscriptDigest({ prompt }) {
       return getProvider(config).complete({
         config,
@@ -106,6 +86,4 @@ function createAIAdapter({ config }) {
   };
 }
 
-module.exports = {
-  createAIAdapter
-};
+module.exports = { createAIAdapter };

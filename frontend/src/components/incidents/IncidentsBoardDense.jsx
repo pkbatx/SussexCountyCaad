@@ -1,24 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { listIncidents } from "../../api";
 import { AUTO_RESOLVE_MINUTES } from "../../config";
+import { formatIsoSecond } from "../../state/formatting";
 
 function minutesSince(value) {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return (Date.now() - date.getTime()) / 60000;
-}
-
-function shortHash(id) {
-  if (!id) return "—";
-  return String(id).slice(0, 8);
-}
-
-function formatTs(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toISOString().replace("T", " ").slice(0, 19);
 }
 
 function statusFor(incident) {
@@ -110,8 +99,8 @@ export function IncidentsBoardDense({ filters, refreshToken, onSelect, onActiveC
                   className={isSelected ? "is-selected" : ""}
                   onClick={() => handleSelect(incident)}
                 >
-                  <td className="mono">{formatTs(incident.last_call_at || incident.updated_at)}</td>
-                  <td className="mono">{shortHash(incident.incident_id)}</td>
+                  <td className="mono">{formatIsoSecond(incident.last_call_at || incident.updated_at)}</td>
+                  <td className="mono">{String(incident.incident_id).slice(0, 8)}</td>
                   <td>{incident.incident_type || incident.top_call_type || "—"}</td>
                   <td>{locationSummary(incident)}</td>
                   <td className="mono" style={{ textAlign: "right" }}>{incident.member_count ?? 0}</td>
