@@ -90,10 +90,10 @@ async function runStage({ config, db, callId }) {
 
     try {
       if (route.channel === "groupme") {
-        await sendGroupMe({ botId: config.groupmeBotId, text: summaryText });
+        await sendGroupMe({ db, botId: config.groupmeBotId, text: summaryText });
       }
       if (route.channel === "discord") {
-        await sendDiscord({ webhookUrl: config.discordWebhookUrl, text: summaryText });
+        await sendDiscord({ db, webhookUrl: config.discordWebhookUrl, text: summaryText });
       }
 
       createNotification(db, {

@@ -1,14 +1,19 @@
-async function sendDiscord({ webhookUrl, text }) {
-  const response = await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content: text })
-  });
+const { notifyWithRetry } = require("../services/notifications");
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Discord send failed: ${body}`);
-  }
+async function sendDiscord({ db, webhookUrl, text }) {
+  const payload = { content: text };
+  return notifyWithRetry({
+    db,
+    channel: "discord",
+    payload,
+    send: (signal) =>
+      fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal
+      })
+  });
 }
 
 module.exports = {

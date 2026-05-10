@@ -5,6 +5,7 @@ const { ingestReferenceData } = require("./db/reference_ingest");
 const { startApiServer } = require("./api/server");
 const { startWatcher } = require("./ingest/watcher");
 const { startPipeline } = require("./pipeline/runner");
+const log = require("./services/logger");
 
 async function main() {
   const config = loadConfig();
@@ -14,11 +15,11 @@ async function main() {
   await ingestReferenceData({ db, config });
 
   const pipeline = startPipeline({ config, db });
-  startApiServer({ config, db, pipeline });
+  await startApiServer({ config, db, pipeline });
   startWatcher({ config, db, pipeline });
 }
 
 main().catch((error) => {
-  console.error("[backend] fatal error", error);
+  log.fatal({ err: error }, "backend fatal error");
   process.exit(1);
 });

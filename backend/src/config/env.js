@@ -54,7 +54,12 @@ function loadConfig() {
     callsDir: requireEnv("CALLS_DIR"),
     dbPath: requireEnv("CAAD_DB_PATH"),
     apiPort: Number(process.env.API_PORT || 3000),
+    frontendOrigin: process.env.FRONTEND_ORIGIN || null,
+    logLevel: (process.env.LOG_LEVEL || "info").toLowerCase(),
     notifyEnabled: parseBool(process.env.NOTIFY_ENABLED, false),
+    aiProvider: (process.env.AI_PROVIDER || "anthropic").toLowerCase(),
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
+    anthropicModel: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
     openaiApiKey: process.env.OPENAI_API_KEY || null,
     openaiModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
     openaiTranscriptionModel:

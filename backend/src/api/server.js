@@ -1,4 +1,17 @@
-const http = require("http");
+// Fastify v5 HTTP layer. Existing handlers under api/handlers/ keep their
+// (req, res, deps) signature and write directly to the raw Node response —
+// each route here calls reply.hijack() so Fastify does not try to serialize
+// or send a body of its own. The SSE route at /api/events relies on this
+// hijack pattern as well: the handler keeps the raw socket open, writes
+// chunks for each emitRefresh, and unsubscribes on req.on('close'). To
+// verify SSE end-to-end, run `npm run dev:backend`, open the frontend, and
+// confirm the connection indicator goes green; tail backend logs while
+// triggering an emitRefresh in another stage.
+
+const Fastify = require("fastify");
+const fastifyCors = require("@fastify/cors");
+const log = require("../services/logger");
+
 const { healthHandler } = require("./handlers/health");
 const {
   listCallsHandler,
@@ -8,11 +21,14 @@ const {
 const { audioHandler } = require("./handlers/audio");
 const {
   listIncidentsHandler,
-  incidentDetailHandler
+  incidentDetailHandler,
+  incidentTimelineHandler
 } = require("./handlers/incidents");
 const { listAgenciesHandler } = require("./handlers/agencies");
 const { listNotificationsHandler } = require("./handlers/notifications");
+const { listNotificationLogHandler } = require("./handlers/notification_log");
 const { eventsHandler } = require("./handlers/events");
+const { listSignalsHandler } = require("./handlers/signals");
 const {
   submitCallFeedbackHandler,
   submitIncidentFeedbackHandler,
@@ -26,136 +42,204 @@ const {
   summaryInsightsHandler,
   summaryDigestHandler,
   summaryTrendsHandler,
-  summaryHotspotsHandler
+  summaryHotspotsHandler,
+  summaryEvidenceHandler
 } = require("./handlers/summary");
-const { handleTimelineRoutes } = require("./routes");
+const { timelineTranscriptHandler } = require("./handlers/timeline");
 
-function startApiServer({ config, db, pipeline }) {
-  const server = http.createServer((req, res) => {
-    if (req.method === "GET" && req.url === "/api/health") {
-      return healthHandler(req, res);
-    }
+function hijack(reply) {
+  reply.hijack();
+}
 
-    if (handleTimelineRoutes(req, res, { db })) {
-      return;
-    }
+function bridge(handler) {
+  return async (request, reply) => {
+    hijack(reply);
+    return handler(request.raw, reply.raw);
+  };
+}
 
-    if (req.method === "GET" && req.url.startsWith("/api/calls")) {
-      const parts = req.url.split("?")[0].split("/").filter(Boolean);
-      if (parts.length === 2) {
-        return listCallsHandler(req, res, { db });
-      }
-      if (parts.length === 3) {
-        return callDetailHandler(req, res, { db, callId: parts[2] });
-      }
-      if (parts.length === 4 && parts[3] === "audio") {
-        return audioHandler(req, res, { db, callId: parts[2], config });
-      }
-    }
+function bridgeWith(handler, build) {
+  return async (request, reply) => {
+    hijack(reply);
+    return handler(request.raw, reply.raw, build(request));
+  };
+}
 
-    if (req.method === "POST" && req.url.startsWith("/api/calls/")) {
-      const parts = req.url.split("?")[0].split("/").filter(Boolean);
-      if (parts.length === 4 && parts[3] === "retry") {
-        return retryStageHandler(req, res, { pipeline, db, callId: parts[2] });
-      }
-    }
+async function startApiServer({ config, db, pipeline }) {
+  const fastify = Fastify({ logger: false });
 
-    if (req.method === "GET" && req.url.startsWith("/api/incidents")) {
-      const parts = req.url.split("?")[0].split("/").filter(Boolean);
-      if (parts.length === 2) {
-        return listIncidentsHandler(req, res, { db });
-      }
-      if (parts.length === 3) {
-        return incidentDetailHandler(req, res, { db, incidentId: parts[2] });
-      }
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/agencies")) {
-      return listAgenciesHandler(req, res, { db });
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/notifications")) {
-      return listNotificationsHandler(req, res, { db });
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/debug/calls/")) {
-      const parts = req.url.split("?")[0].split("/").filter(Boolean);
-      if (parts.length === 4) {
-        return debugCallHandler(req, res, { db, callId: parts[3] });
-      }
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/map/points")) {
-      return mapPointsHandler(req, res, { db });
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/summary/hotspots")) {
-      return summaryHotspotsHandler(req, res, { db });
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/summary/digests")) {
-      return summaryDigestHandler(req, res, { db, config });
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/summary/insights")) {
-      return summaryInsightsHandler(req, res, { db });
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/summary/trends")) {
-      return summaryTrendsHandler(req, res, { db });
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/summary")) {
-      return summaryMetricsHandler(req, res, { db });
-    }
-
-    if (req.method === "GET" && req.url.startsWith("/api/events")) {
-      return eventsHandler(req, res);
-    }
-
-    if (req.url.startsWith("/api/feedback/")) {
-      const parts = req.url.split("?")[0].split("/").filter(Boolean);
-      if (parts.length === 4 && parts[2] === "calls") {
-        if (req.method === "POST") {
-          return submitCallFeedbackHandler(req, res, {
-            db,
-            callId: parts[3],
-            pipeline
-          });
-        }
-        if (req.method === "GET") {
-          return listCallFeedbackHandler(req, res, {
-            db,
-            callId: parts[3]
-          });
-        }
-      }
-      if (parts.length === 4 && parts[2] === "incidents") {
-        if (req.method === "POST") {
-          return submitIncidentFeedbackHandler(req, res, {
-            db,
-            incidentId: parts[3],
-            pipeline
-          });
-        }
-        if (req.method === "GET") {
-          return listIncidentFeedbackHandler(req, res, {
-            db,
-            incidentId: parts[3]
-          });
-        }
-      }
-    }
-
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "not_found" }));
+  await fastify.register(fastifyCors, {
+    origin: config.frontendOrigin || true,
+    credentials: true
   });
 
-  server.listen(config.apiPort, () => {
-    console.log(`[api] listening on ${config.apiPort}`);
+  // Health -------------------------------------------------------------------
+  fastify.get("/api/health", bridge(healthHandler));
+  fastify.get("/healthz", async (_request, reply) => {
+    reply.code(200).send({ status: "ok" });
   });
 
-  return server;
+  // Timeline routes (handled previously in routes.js) ------------------------
+  fastify.get(
+    "/api/incidents/:incidentId/timeline",
+    bridgeWith(incidentTimelineHandler, (req) => ({
+      db,
+      incidentId: req.params.incidentId
+    }))
+  );
+  fastify.get(
+    "/api/timeline/:eventId/transcript",
+    bridgeWith(timelineTranscriptHandler, (req) => ({
+      db,
+      eventId: req.params.eventId
+    }))
+  );
+  fastify.get(
+    "/api/summary/:statementId/evidence",
+    bridgeWith(summaryEvidenceHandler, (req) => ({
+      db,
+      statementId: req.params.statementId
+    }))
+  );
+
+  // Calls --------------------------------------------------------------------
+  fastify.get(
+    "/api/calls",
+    bridgeWith(listCallsHandler, () => ({ db }))
+  );
+  fastify.get(
+    "/api/calls/:callId",
+    bridgeWith(callDetailHandler, (req) => ({ db, callId: req.params.callId }))
+  );
+  fastify.get(
+    "/api/calls/:callId/audio",
+    bridgeWith(audioHandler, (req) => ({
+      db,
+      config,
+      callId: req.params.callId
+    }))
+  );
+  fastify.post(
+    "/api/calls/:callId/retry",
+    bridgeWith(retryStageHandler, (req) => ({
+      db,
+      pipeline,
+      callId: req.params.callId
+    }))
+  );
+
+  // Incidents ----------------------------------------------------------------
+  fastify.get(
+    "/api/incidents",
+    bridgeWith(listIncidentsHandler, () => ({ db }))
+  );
+  fastify.get(
+    "/api/incidents/:incidentId",
+    bridgeWith(incidentDetailHandler, (req) => ({
+      db,
+      incidentId: req.params.incidentId
+    }))
+  );
+
+  // Agencies / notifications / signals --------------------------------------
+  fastify.get(
+    "/api/agencies",
+    bridgeWith(listAgenciesHandler, () => ({ db }))
+  );
+  fastify.get(
+    "/api/notifications/log",
+    bridgeWith(listNotificationLogHandler, () => ({ db }))
+  );
+  fastify.get(
+    "/api/notifications",
+    bridgeWith(listNotificationsHandler, () => ({ db }))
+  );
+  fastify.get(
+    "/api/signals",
+    bridgeWith(listSignalsHandler, () => ({ db }))
+  );
+
+  // Debug --------------------------------------------------------------------
+  fastify.get(
+    "/api/debug/calls/:callId",
+    bridgeWith(debugCallHandler, (req) => ({
+      db,
+      callId: req.params.callId
+    }))
+  );
+
+  // Map ----------------------------------------------------------------------
+  fastify.get(
+    "/api/map/points",
+    bridgeWith(mapPointsHandler, () => ({ db }))
+  );
+
+  // Summary (most-specific routes first) -------------------------------------
+  fastify.get(
+    "/api/summary/hotspots",
+    bridgeWith(summaryHotspotsHandler, () => ({ db }))
+  );
+  fastify.get(
+    "/api/summary/digests",
+    bridgeWith(summaryDigestHandler, () => ({ db, config }))
+  );
+  fastify.get(
+    "/api/summary/insights",
+    bridgeWith(summaryInsightsHandler, () => ({ db }))
+  );
+  fastify.get(
+    "/api/summary/trends",
+    bridgeWith(summaryTrendsHandler, () => ({ db }))
+  );
+  fastify.get(
+    "/api/summary",
+    bridgeWith(summaryMetricsHandler, () => ({ db }))
+  );
+
+  // Server-Sent Events -------------------------------------------------------
+  // The eventsHandler keeps the connection open and writes periodic
+  // keepalives plus per-emit `event: refresh` lines. reply.hijack() prevents
+  // Fastify from finalizing the reply.
+  fastify.get("/api/events", async (request, reply) => {
+    hijack(reply);
+    eventsHandler(request.raw, reply.raw);
+  });
+
+  // Feedback -----------------------------------------------------------------
+  fastify.post(
+    "/api/feedback/calls/:callId",
+    bridgeWith(submitCallFeedbackHandler, (req) => ({
+      db,
+      pipeline,
+      callId: req.params.callId
+    }))
+  );
+  fastify.get(
+    "/api/feedback/calls/:callId",
+    bridgeWith(listCallFeedbackHandler, (req) => ({
+      db,
+      callId: req.params.callId
+    }))
+  );
+  fastify.post(
+    "/api/feedback/incidents/:incidentId",
+    bridgeWith(submitIncidentFeedbackHandler, (req) => ({
+      db,
+      pipeline,
+      incidentId: req.params.incidentId
+    }))
+  );
+  fastify.get(
+    "/api/feedback/incidents/:incidentId",
+    bridgeWith(listIncidentFeedbackHandler, (req) => ({
+      db,
+      incidentId: req.params.incidentId
+    }))
+  );
+
+  await fastify.listen({ port: config.apiPort, host: "0.0.0.0" });
+  log.info({ port: config.apiPort }, "api listening");
+  return fastify;
 }
 
 module.exports = {
