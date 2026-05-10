@@ -15,6 +15,20 @@ test("feedback signals persist with adjustments", () => {
   db.exec(loadSql("001_init.sql"));
   db.exec(loadSql("003_incident_centric.sql"));
 
+  const now = "2025-12-21T00:00:00.000Z";
+  db.prepare(
+    "INSERT INTO calls (call_id, source_path, first_seen_at, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run("call-001", "/tmp/x.wav", now, "processing", now, now);
+  db.prepare(
+    "INSERT INTO incident_groups (incident_id, group_confidence, created_at, updated_at) VALUES (?, ?, ?, ?)"
+  ).run("incident-001", 0.8, now, now);
+  db.prepare(
+    "INSERT INTO stage_runs (run_id, call_id, stage_name, attempt_number, status, started_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run("run-001", "call-001", "grouping", 1, "succeeded", now);
+  db.prepare(
+    "INSERT INTO grouping_decisions (decision_id, call_id, incident_id, run_id, decision, confidence, requires_review, signals_json, explanation, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run("decision-001", "call-001", "incident-001", "run-001", "new_incident", 0.8, 0, "[]", "ok", now);
+
   const feedbackId = createFeedbackSignal(db, {
     incidentId: "incident-001",
     callId: "call-001",

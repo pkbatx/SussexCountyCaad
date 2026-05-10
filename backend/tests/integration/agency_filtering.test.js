@@ -20,7 +20,11 @@ function applyMigrations(db) {
     "002_rollup_artifacts.sql",
     "003_incident_centric.sql",
     "004_reference_data_geo.sql",
-    "005_agency_registry.sql"
+    "005_agency_registry.sql",
+    "006_unit_registry.sql",
+    "007_reference_embeddings.sql",
+    "008_ui_ai_upgrade.sql",
+    "009_digest_summaries.sql"
   ].forEach((file) => db.exec(loadSql(file)));
 }
 
