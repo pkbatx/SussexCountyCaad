@@ -59,7 +59,7 @@ function IncidentRowsSkeleton() {
   ));
 }
 
-export function IncidentsBoardDense({ filters, refreshToken, onSelect, onActiveCountChange }) {
+export function IncidentsBoardDense({ filters, refreshToken, onSelect, onActiveCountChange, filtersActive, onClearFilters }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -118,7 +118,14 @@ export function IncidentsBoardDense({ filters, refreshToken, onSelect, onActiveC
           ) : items.length === 0 ? (
             <tr>
               <td colSpan={6} className="empty-state empty-state--cell">
-                NO INCIDENTS IN THE LAST 24 HOURS
+                {filtersActive ? "NO INCIDENTS MATCH THE CURRENT FILTERS" : "NO INCIDENTS IN THE LAST 24 HOURS"}
+                {filtersActive ? (
+                  <div className="empty-state-actions">
+                    <button type="button" className="empty-state-link" onClick={onClearFilters}>
+                      clear all filters
+                    </button>
+                  </div>
+                ) : null}
               </td>
             </tr>
           ) : (

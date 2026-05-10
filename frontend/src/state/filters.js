@@ -87,3 +87,48 @@ export function serializeFilters(filters) {
 export function updateFilters(current, next) {
   return { ...current, ...next };
 }
+
+// Hash query persistence — keep only filters that diverge from defaults so a
+// clean state has an empty hash and shared URLs are minimal.
+export function filtersToHash(filters) {
+  const defaults = createDefaultFilters();
+  const params = new URLSearchParams();
+  if (filters.start && filters.start !== defaults.start) params.set("start", filters.start);
+  if (filters.end && filters.end !== defaults.end) params.set("end", filters.end);
+  (filters.agencies || []).forEach((a) => params.append("agency", a));
+  (filters.serviceTypes || []).forEach((s) => params.append("service_type", s));
+  if (filters.status && filters.status !== "any") params.set("status", filters.status);
+  if (filters.incidentType) params.set("incident_type", filters.incidentType);
+  if (filters.jurisdiction) params.set("jurisdiction", filters.jurisdiction);
+  if (filters.mapMode && filters.mapMode !== defaults.mapMode) params.set("map_mode", filters.mapMode);
+  return params;
+}
+
+export function filtersFromHash(params) {
+  const defaults = createDefaultFilters();
+  if (!params || params.toString() === "") return defaults;
+  const agencies = params.getAll("agency");
+  const serviceTypes = params.getAll("service_type");
+  return {
+    ...defaults,
+    start: params.get("start") || defaults.start,
+    end: params.get("end") || defaults.end,
+    agencies,
+    serviceTypes,
+    status: params.get("status") || "any",
+    incidentType: params.get("incident_type") || "",
+    jurisdiction: params.get("jurisdiction") || "",
+    mapMode: params.get("map_mode") || defaults.mapMode
+  };
+}
+
+export function hasActiveFilters(filters) {
+  const defaults = createDefaultFilters();
+  if (filters.start !== defaults.start || filters.end !== defaults.end) return true;
+  if (filters.agencies?.length) return true;
+  if (filters.serviceTypes?.length) return true;
+  if (filters.status && filters.status !== "any") return true;
+  if (filters.incidentType) return true;
+  if (filters.jurisdiction) return true;
+  return false;
+}

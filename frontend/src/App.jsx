@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { HeaderBar } from "./components/layout/HeaderBar";
 import { LeftRail } from "./components/layout/LeftRail";
 import { TopFilterBar } from "./components/filters/TopFilterBar";
@@ -10,21 +10,35 @@ import { MapView } from "./components/map/MapView";
 import { NotificationFeed } from "./components/notifications/NotificationFeed";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { ShortcutsCheatsheet } from "./components/common/ShortcutsCheatsheet";
-import { createDefaultFilters, updateFilters } from "./state/filters";
-import { useHashRoute } from "./hooks/useHashRoute";
+import {
+  createDefaultFilters,
+  filtersFromHash,
+  filtersToHash,
+  hasActiveFilters,
+  updateFilters
+} from "./state/filters";
+import { useHashRoute, useHashParams } from "./hooks/useHashRoute";
 import { useSseStatus } from "./hooks/useSseStatus";
 import { useDetailCache } from "./hooks/useDetailCache";
 import { useMapViewState } from "./hooks/useMapViewState";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
 export function App() {
-  const [filters, setFilters] = useState(createDefaultFilters);
   const [route, setRoute] = useHashRoute("incidents");
+  const [hashParams, setHashParams] = useHashParams();
+  const [filters, setFilters] = useState(() => filtersFromHash(hashParams));
   const [refreshToken, setRefreshToken] = useState(0);
   const [returnRoute, setReturnRoute] = useState("incidents");
   const [activeIncidents, setActiveIncidents] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(Date.now());
   const [helpOpen, setHelpOpen] = useState(false);
+
+  // Reflect filters → hash on every change so reloads + sharing preserve state.
+  useEffect(() => {
+    const next = filtersToHash(filters).toString();
+    if (hashParams.toString() !== next) setHashParams(new URLSearchParams(next));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   const handleRefresh = useCallback(() => {
     setRefreshToken(Date.now());
@@ -43,6 +57,14 @@ export function App() {
     },
     [clearAll, handleRefresh]
   );
+
+  const clearFilters = useCallback(() => {
+    setFilters(createDefaultFilters());
+    clearAll();
+    handleRefresh();
+  }, [clearAll, handleRefresh]);
+
+  const filtersActive = useMemo(() => hasActiveFilters(filters), [filters]);
 
   const navigateToCall = useCallback(
     (callId) => {
@@ -65,13 +87,11 @@ export function App() {
     else if (route.startsWith("incident/") || route === "notifications") setRoute("incidents");
   }, [route, returnRoute, setRoute]);
 
-  // App-level keys handle Esc + ? globally. List-level j/k/Enter is owned by
-  // the active list component so it can reach its own selection state.
   useKeyboardShortcuts({
     onBack: helpOpen ? () => setHelpOpen(false) : handleBack,
     onHelp: () => setHelpOpen((prev) => !prev),
     onSearch: () => {
-      // TODO(perry): wire to the (not-yet-implemented) global search input.
+      // TODO(perry): wire to a (not-yet-implemented) global search input.
     }
   });
 
@@ -98,6 +118,8 @@ export function App() {
         refreshToken={refreshToken}
         onActiveCountChange={setActiveIncidents}
         onSelect={(incidentId) => setRoute(`incident/${incidentId}`)}
+        filtersActive={filtersActive}
+        onClearFilters={clearFilters}
       />
     );
   };
@@ -121,14 +143,11 @@ export function App() {
         />
         <main className="tactical-center" style={isDetailRoute ? { display: "flex", flexDirection: "column", minHeight: 0 } : undefined}>
           {isDetailRoute ? null : (
-            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
-              <TopFilterBar
-                filters={filters}
-                onChange={applyFilters}
-                refreshToken={refreshToken}
-                onMetrics={() => {}}
-              />
-            </div>
+            <TopFilterBar
+              filters={filters}
+              onChange={applyFilters}
+              refreshToken={refreshToken}
+            />
           )}
           <ErrorBoundary onBack={() => setRoute("incidents")} key={route}>
             {renderCenter()}
