@@ -1,4 +1,3 @@
-import "./legacy-styles.css";
 import "./styles.css";
 import "mapbox-gl/dist/mapbox-gl.css";
 import React from "react";

@@ -3,7 +3,6 @@ const { listGroupingDecisionsForIncident } = require("../../db/queries/grouping_
 const { createIncidentRollup } = require("../../db/queries/rollups");
 const { listLocationsForSubject } = require("../../db/queries/locations");
 const { listReferenceCandidates } = require("../../db/queries/reference_data");
-const { listSignalsForCalls } = require("../../db/queries/pipeline_signals");
 const { extractTownFromGeocode, normalizeTownQuery } = require("../../geo/town-utils");
 
 function getIncidentForCall(db, callId) {
@@ -135,9 +134,6 @@ async function runStage({ db, callId, runId, pipeline }) {
     crossStreet,
     poi
   });
-  const memberSignals = listSignalsForCalls(db, includedCallIds);
-  const dataQualityFlags = collectDataQualityFlags(memberSignals);
-
   const keyFields = {
     agency: latestFields.agency,
     incident_type: payload.incident_type || null,
@@ -151,8 +147,7 @@ async function runStage({ db, callId, runId, pipeline }) {
           confidence: latestDecision.confidence,
           requires_review: latestDecision.requires_review
         }
-      : null,
-    data_quality_flags: dataQualityFlags.length ? dataQualityFlags : undefined
+      : null
   };
   const openQuestions = [];
   if (!address) {
@@ -181,21 +176,6 @@ async function runStage({ db, callId, runId, pipeline }) {
   }
 }
 
-function collectDataQualityFlags(signals) {
-  if (!Array.isArray(signals) || signals.length === 0) return [];
-  const flags = new Set();
-  for (const row of signals) {
-    if (row.signal === "ambiguous" || row.signal === "needs_review") {
-      const reason = row.reason || "";
-      if (reason.includes("ambiguous_location")) flags.add("ambiguous_location");
-      if (reason.includes("low_confidence")) flags.add("low_confidence_inputs");
-      if (!reason) flags.add(row.signal);
-    }
-  }
-  return Array.from(flags);
-}
-
 module.exports = {
-  runStage,
-  collectDataQualityFlags
+  runStage
 };

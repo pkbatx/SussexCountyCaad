@@ -142,22 +142,3 @@ export function submitIncidentFeedback(incidentId, payload) {
 export function listIncidentFeedback(incidentId) {
   return fetchJson(`/api/feedback/incidents/${incidentId}`);
 }
-
-export function listSignals({ callId, stage, signal, limit, offset } = {}) {
-  const params = new URLSearchParams();
-  if (callId) params.set("call_id", callId);
-  if (stage) params.set("stage", stage);
-  if (signal) params.set("signal", signal);
-  if (Number.isFinite(limit)) params.set("limit", String(limit));
-  if (Number.isFinite(offset)) params.set("offset", String(offset));
-  const query = params.toString();
-  return fetchJson(query ? `/api/signals?${query}` : "/api/signals");
-}
-
-export function listNotificationLog({ limit = 50, offset = 0, channel } = {}) {
-  const params = new URLSearchParams();
-  params.set("limit", String(limit));
-  params.set("offset", String(offset));
-  if (channel) params.set("channel", channel);
-  return fetchJson(`/api/notifications/log?${params.toString()}`);
-}

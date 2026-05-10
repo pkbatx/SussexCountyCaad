@@ -15,8 +15,6 @@ const { getCallById } = require("../../db/queries/calls");
 const { createGroupingDecision } = require("../../db/queries/grouping_decisions");
 const { createAIInvocation } = require("../../db/queries/ai_invocations");
 const { listFeedbackSignals } = require("../../db/queries/feedback");
-const { listSignals, createSignal } = require("../../db/queries/pipeline_signals");
-const { listIncidentMembers } = require("../../db/queries/incidents");
 const { selectIncident } = require("../grouping-policy");
 const { applyReAlert } = require("../re-alert");
 
@@ -56,12 +54,10 @@ function buildPrompt({
   threshold,
   maxSignals,
   callId,
-  groupedAt,
-  ambiguousNote
+  groupedAt
 }) {
   return [
     "You output JSON only. No markdown. No extra keys.",
-    ...(ambiguousNote ? [ambiguousNote] : []),
     "Schema version must be grouping.v2.",
     "incident_id must be a string; use an empty string if unknown.",
     `If confidence < ${threshold}, set requires_review true and prefer new_incident unless explicit incident_id evidence exists.`,
@@ -88,15 +84,13 @@ function buildRepairPrompt({
   threshold,
   maxSignals,
   callId,
-  groupedAt,
-  ambiguousNote
+  groupedAt
 }) {
   return [
     "The previous response failed schema validation.",
     `Errors: ${JSON.stringify(errors)}`,
     "Return JSON that matches the schema exactly with required fields.",
     "You output JSON only. No markdown. No extra keys.",
-    ...(ambiguousNote ? [ambiguousNote] : []),
     "incident_id must be a string; use an empty string if unknown.",
     `If confidence < ${threshold}, set requires_review true and prefer new_incident unless explicit incident_id evidence exists.`,
     `Limit signals to the top ${maxSignals} strongest matches.`,
@@ -311,14 +305,6 @@ async function runStage({ config, db, callId, runId, pipeline }) {
 
   const transcriptText = transcripts[0].text;
   const groupedAt = new Date().toISOString();
-
-  const ambiguousSignals = listSignals(db, {
-    callId,
-    signal: "ambiguous",
-    limit: 10
-  });
-  const ambiguousNote = buildAmbiguousNote(ambiguousSignals);
-
   const prompt = buildPrompt({
     transcriptText,
     extractionSummary,
@@ -326,8 +312,7 @@ async function runStage({ config, db, callId, runId, pipeline }) {
     threshold: config.groupingConfidenceThreshold,
     maxSignals: config.groupingMaxSignals,
     callId,
-    groupedAt,
-    ambiguousNote
+    groupedAt
   });
 
   const adapter = createAIAdapter({ config });
@@ -349,8 +334,7 @@ async function runStage({ config, db, callId, runId, pipeline }) {
             threshold: config.groupingConfidenceThreshold,
             maxSignals: config.groupingMaxSignals,
             callId,
-            groupedAt,
-            ambiguousNote
+            groupedAt
           });
 
     const result = await adapter.groupIncident({ prompt: currentPrompt });
@@ -487,40 +471,9 @@ async function runStage({ config, db, callId, runId, pipeline }) {
     });
   }
 
-  recordRetryBreadcrumb({ db, callId, incidentId, ambiguousSignals });
-
   if (pipeline?.enqueue) {
     pipeline.enqueue(callId, "incidentSummary");
   }
-}
-
-function buildAmbiguousNote(signals) {
-  if (!Array.isArray(signals) || signals.length === 0) return null;
-  const fields = new Set();
-  for (const row of signals) {
-    const reason = row?.reason || "";
-    const match = reason.match(/low_confidence:([^;]+)/);
-    if (match) {
-      match[1].split(",").map((s) => s.trim()).filter(Boolean).forEach((f) => fields.add(f));
-    }
-    if (reason.includes("ambiguous_location")) {
-      fields.add("location");
-    }
-  }
-  if (!fields.size) return null;
-  return `Note: extraction confidence was low for [${Array.from(fields).join(", ")}]. Weight geographic proximity more heavily than call-type similarity for this call.`;
-}
-
-function recordRetryBreadcrumb({ db, callId, incidentId, ambiguousSignals }) {
-  if (!incidentId || !ambiguousSignals?.length) return;
-  const members = listIncidentMembers(db, incidentId);
-  if (members.length >= 2) return;
-  createSignal(db, {
-    callId,
-    stage: "grouping",
-    signal: "retry_grouping",
-    reason: `singleton incident ${incidentId} with ambiguous extraction`
-  });
 }
 
 module.exports = {
