@@ -1,6 +1,5 @@
 const { getStageHandler } = require("./stages");
 const { runStageWithTracking } = require("./stage-runner");
-const log = require("../services/logger");
 
 function startPipeline({ config, db }) {
   const queue = [];
@@ -19,10 +18,7 @@ function startPipeline({ config, db }) {
     const job = queue.shift();
     runStage(job.callId, job.stageName)
       .catch((error) => {
-        log.error(
-          { callId: job.callId, stage: job.stageName, err: error },
-          "pipeline stage failed"
-        );
+        console.error("[pipeline] stage failed", error);
       })
       .finally(() => {
         running = false;

@@ -1,7 +1,6 @@
 const fs = require("fs");
 const path = require("path");
 const { ingestFile } = require("./ingest");
-const log = require("../services/logger");
 
 function startWatcher({ config, db, pipeline }) {
   const callsDir = config.callsDir;
@@ -20,7 +19,7 @@ function startWatcher({ config, db, pipeline }) {
     try {
       ingestFile({ db, pipeline, filePath, config });
     } catch (error) {
-      log.error({ filePath, err: error }, "ingest failed");
+      console.error("[ingest] failed", error);
     } finally {
       inFlight.delete(filePath);
     }
@@ -46,7 +45,7 @@ function startWatcher({ config, db, pipeline }) {
   scanDirectory();
   setInterval(scanDirectory, 10000);
 
-  log.info({ callsDir }, "ingest watching");
+  console.log(`[ingest] watching ${callsDir}`);
 }
 
 module.exports = {

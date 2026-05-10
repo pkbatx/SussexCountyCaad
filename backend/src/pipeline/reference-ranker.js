@@ -3,7 +3,6 @@ const {
   listReferenceEmbeddings,
   upsertReferenceEmbedding
 } = require("../db/queries/reference_embeddings");
-const log = require("../services/logger");
 
 function cosineSimilarity(left, right) {
   if (!Array.isArray(left) || !Array.isArray(right)) {
@@ -109,7 +108,7 @@ async function rerankReferenceCandidates({ db, config, text, candidates }) {
     });
     queryEmbedding = result.embeddings?.[0] || null;
   } catch (error) {
-    log.warn({ err: error }, "reference query embedding failed");
+    console.warn(`[reference] query embedding failed: ${error.message}`);
     return candidates;
   }
 
