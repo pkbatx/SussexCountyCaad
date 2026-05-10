@@ -61,6 +61,5 @@ function listSignalsForCalls(db, callIds) {
 module.exports = {
   createSignal,
   listSignals,
-  listSignalsForCalls,
-  VALID_SIGNALS
+  listSignalsForCalls
 };
