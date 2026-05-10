@@ -15,6 +15,7 @@ const {
   listReferenceCandidates
 } = require("../../db/queries/reference_data");
 const { listFeedbackSignals } = require("../../db/queries/feedback");
+const { createSignal } = require("../../db/queries/pipeline_signals");
 const { getCallById } = require("../../db/queries/calls");
 const { extractFilenameHints } = require("../filename-hints");
 const { normalizeAgency, getAgencyCoverageTowns, resolveAgency } = require("../agency-normalizer");
@@ -670,9 +671,53 @@ async function runStage({ config, db, callId, runId, pipeline }) {
     confidenceSummary: payload.confidence_overall ?? summarizeConfidence(payload)
   });
 
+  recordExtractionSignals(db, callId, payload);
+
   if (pipeline?.enqueue) {
     pipeline.enqueue(callId, "grouping");
     pipeline.enqueue(callId, "geo");
+  }
+}
+
+const AMBIGUOUS_CONFIDENCE_THRESHOLD = 0.6;
+const LOCATION_FIELDS = ["address_normalized", "address_raw", "landmark"];
+
+function recordExtractionSignals(db, callId, payload) {
+  if (!payload) return;
+  const reasons = [];
+
+  const fieldConfidence = payload.field_confidence || {};
+  const lowFields = Object.entries(fieldConfidence)
+    .filter(([field, score]) => {
+      if (typeof score !== "number" || score >= AMBIGUOUS_CONFIDENCE_THRESHOLD) {
+        return false;
+      }
+      // Only flag fields the model actually populated. Empty + low confidence
+      // is just "unknown", not "ambiguous".
+      const value = payload[field];
+      return value !== null && value !== undefined && value !== "";
+    })
+    .map(([field]) => field);
+
+  if (lowFields.length) {
+    reasons.push(`low_confidence:${lowFields.join(",")}`);
+  }
+
+  const hasLocation = LOCATION_FIELDS.some((field) => {
+    const value = payload[field];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+  if (!hasLocation) {
+    reasons.push("ambiguous_location");
+  }
+
+  if (reasons.length) {
+    createSignal(db, {
+      callId,
+      stage: "extraction",
+      signal: "ambiguous",
+      reason: reasons.join("; ")
+    });
   }
 }
 

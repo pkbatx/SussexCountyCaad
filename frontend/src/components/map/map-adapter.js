@@ -3,6 +3,8 @@ import mapboxgl from "mapbox-gl";
 const SOURCE_ID = "points";
 const HEAT_LAYER_ID = "heatmap";
 const MARKER_LAYER_ID = "markers";
+const CLUSTER_LAYER_ID = "clusters";
+const CLUSTER_COUNT_LAYER_ID = "cluster-count";
 
 function toGeoJSON(points) {
   return {
@@ -48,24 +50,35 @@ export function createMapAdapter(container, { center, zoom, accessToken, style, 
   let pendingBounds = null;
   let currentOnSelect = null;
   let mapReady = false;
+  let pulseMarker = null;
 
   function ensureSource() {
     if (map.getSource(SOURCE_ID)) return;
     map.addSource(SOURCE_ID, {
       type: "geojson",
-      data: toGeoJSON([])
+      data: toGeoJSON([]),
+      cluster: true,
+      clusterMaxZoom: 10,
+      clusterRadius: 40
     });
   }
 
   function ensureLayers() {
-    if (map.getLayer(HEAT_LAYER_ID) || map.getLayer(MARKER_LAYER_ID)) return;
+    if (map.getLayer(HEAT_LAYER_ID)) return;
+    // Heatmap reads from the same clustered source. Heatmap weights the
+    // cluster point_count when present; otherwise falls back to weight.
     map.addLayer({
       id: HEAT_LAYER_ID,
       type: "heatmap",
       source: SOURCE_ID,
       maxzoom: 15,
       paint: {
-        "heatmap-weight": ["coalesce", ["get", "weight"], 0.5],
+        "heatmap-weight": [
+          "case",
+          ["has", "point_count"],
+          ["/", ["get", "point_count"], 6],
+          ["coalesce", ["get", "weight"], 0.5]
+        ],
         "heatmap-intensity": 1,
         "heatmap-radius": 22,
         "heatmap-opacity": 0.85,
@@ -85,16 +98,56 @@ export function createMapAdapter(container, { center, zoom, accessToken, style, 
       }
     });
 
+    // Cluster bubble (marker mode only).
+    map.addLayer({
+      id: CLUSTER_LAYER_ID,
+      type: "circle",
+      source: SOURCE_ID,
+      filter: ["has", "point_count"],
+      paint: {
+        "circle-color": "#3b82f6",
+        "circle-stroke-color": "#3a4255",
+        "circle-stroke-width": 1,
+        "circle-opacity": 0.85,
+        "circle-radius": [
+          "step",
+          ["get", "point_count"],
+          14,
+          5, 18,
+          15, 22,
+          50, 26
+        ]
+      }
+    });
+
+    // Cluster count label.
+    map.addLayer({
+      id: CLUSTER_COUNT_LAYER_ID,
+      type: "symbol",
+      source: SOURCE_ID,
+      filter: ["has", "point_count"],
+      layout: {
+        "text-field": ["get", "point_count_abbreviated"],
+        "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+        "text-size": 11
+      },
+      paint: {
+        "text-color": "#0a0c0f"
+      }
+    });
+
+    // Unclustered points.
     map.addLayer({
       id: MARKER_LAYER_ID,
       type: "circle",
       source: SOURCE_ID,
+      filter: ["!", ["has", "point_count"]],
       paint: {
         "circle-radius": 5,
-        "circle-color": "#f59e0b",
+        "circle-color": "#06b6d4",
         "circle-stroke-width": 1,
         "circle-stroke-color": "#94a3b8",
-        "circle-opacity": 0.85
+        "circle-opacity": 0.9
       }
     });
   }
@@ -105,16 +158,22 @@ export function createMapAdapter(container, { center, zoom, accessToken, style, 
     source.setData(toGeoJSON(points));
   }
 
+  function applyModeVisibility(nextMode) {
+    const heatVisible = nextMode === "heatmap" ? "visible" : "none";
+    const markerVisible = nextMode === "markers" ? "visible" : "none";
+    map.setLayoutProperty(HEAT_LAYER_ID, "visibility", heatVisible);
+    map.setLayoutProperty(CLUSTER_LAYER_ID, "visibility", markerVisible);
+    map.setLayoutProperty(CLUSTER_COUNT_LAYER_ID, "visibility", markerVisible);
+    map.setLayoutProperty(MARKER_LAYER_ID, "visibility", markerVisible);
+  }
+
   function setMode(nextMode) {
     if (!mapReady) {
       pendingMode = nextMode;
       return;
     }
     if (mode === nextMode) return;
-    const heatVisible = nextMode === "heatmap" ? "visible" : "none";
-    const markerVisible = nextMode === "markers" ? "visible" : "none";
-    map.setLayoutProperty(HEAT_LAYER_ID, "visibility", heatVisible);
-    map.setLayoutProperty(MARKER_LAYER_ID, "visibility", markerVisible);
+    applyModeVisibility(nextMode);
     mode = nextMode;
   }
 
@@ -148,6 +207,37 @@ export function createMapAdapter(container, { center, zoom, accessToken, style, 
     );
   }
 
+  function flyTo(lat, lng, targetZoom = 13) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (!mapReady) {
+      pendingBounds = null;
+      map.once("load", () => flyTo(lat, lng, targetZoom));
+      return;
+    }
+    map.flyTo({ center: [lng, lat], zoom: targetZoom, speed: 1.2 });
+  }
+
+  function setPulseMarker(lat, lng) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      clearPulseMarker();
+      return;
+    }
+    if (pulseMarker) {
+      pulseMarker.setLngLat([lng, lat]);
+      return;
+    }
+    const el = document.createElement("div");
+    el.className = "pulse-marker";
+    pulseMarker = new mapboxgl.Marker(el).setLngLat([lng, lat]).addTo(map);
+  }
+
+  function clearPulseMarker() {
+    if (pulseMarker) {
+      pulseMarker.remove();
+      pulseMarker = null;
+    }
+  }
+
   function getViewState() {
     const mapCenter = map.getCenter();
     return {
@@ -172,6 +262,7 @@ export function createMapAdapter(container, { center, zoom, accessToken, style, 
   }
 
   function destroy() {
+    clearPulseMarker();
     map.remove();
   }
 
@@ -187,22 +278,35 @@ export function createMapAdapter(container, { center, zoom, accessToken, style, 
     ensureSource();
     ensureLayers();
     updateSource(pendingPoints);
-    setMode(pendingMode);
+    applyModeVisibility(pendingMode);
+    mode = pendingMode;
     map.resize();
     if (pendingBounds) {
       setBounds(pendingBounds);
       pendingBounds = null;
     }
-    if (currentOnSelect) {
-      map.on("click", MARKER_LAYER_ID, (event) => {
-        const feature = event.features?.[0];
-        if (!feature?.properties?.entity_id) return;
-        currentOnSelect({
-          entity_id: feature.properties.entity_id,
-          entity_type: feature.properties.entity_type
-        });
+
+    // Click-to-zoom on clusters.
+    map.on("click", CLUSTER_LAYER_ID, (event) => {
+      const features = map.queryRenderedFeatures(event.point, { layers: [CLUSTER_LAYER_ID] });
+      const clusterId = features[0]?.properties?.cluster_id;
+      const source = map.getSource(SOURCE_ID);
+      if (clusterId == null || !source) return;
+      source.getClusterExpansionZoom(clusterId, (err, expansionZoom) => {
+        if (err) return;
+        map.easeTo({ center: features[0].geometry.coordinates, zoom: expansionZoom });
       });
-    }
+    });
+
+    map.on("click", MARKER_LAYER_ID, (event) => {
+      if (!currentOnSelect) return;
+      const feature = event.features?.[0];
+      if (!feature?.properties?.entity_id) return;
+      currentOnSelect({
+        entity_id: feature.properties.entity_id,
+        entity_type: feature.properties.entity_type
+      });
+    });
   });
 
   return {
@@ -211,6 +315,9 @@ export function createMapAdapter(container, { center, zoom, accessToken, style, 
     setMarkers,
     setHeatmap,
     setBounds,
+    flyTo,
+    setPulseMarker,
+    clearPulseMarker,
     getViewState,
     setViewState,
     onViewChange,
