@@ -2,9 +2,14 @@
 // (req, res, deps) signature; each route calls reply.hijack() and forwards
 // request.raw / reply.raw so handlers write directly to the Node socket.
 // /api/events relies on the same hijack so SSE streaming isn't finalized.
+// In production (NODE_ENV=production) the built frontend at frontend/dist is
+// served from `/` with SPA fallback. In dev the Vite server handles that
+// itself on a separate port, so the static block is skipped.
 
+const path = require("path");
 const Fastify = require("fastify");
 const fastifyCors = require("@fastify/cors");
+const fastifyStatic = require("@fastify/static");
 const log = require("../services/logger");
 
 const { healthHandler } = require("./handlers/health");
@@ -53,7 +58,9 @@ async function startApiServer({ config, db, pipeline }) {
     credentials: true
   });
 
-  fastify.get("/healthz", async (_req, reply) => reply.code(200).send({ status: "ok" }));
+  fastify.get("/healthz", async (_req, reply) =>
+    reply.code(200).send({ status: "ok", ts: new Date().toISOString() })
+  );
   fastify.get("/api/health", bridge(healthHandler));
 
   fastify.get("/api/incidents/:incidentId/timeline",
@@ -106,6 +113,24 @@ async function startApiServer({ config, db, pipeline }) {
     bridge(submitIncidentFeedbackHandler, (req) => ({ db, pipeline, incidentId: req.params.incidentId })));
   fastify.get("/api/feedback/incidents/:incidentId",
     bridge(listIncidentFeedbackHandler, (req) => ({ db, incidentId: req.params.incidentId })));
+
+  // Static frontend + SPA fallback. Gated on NODE_ENV so dev keeps using the
+  // Vite dev server on a separate port. Registered last so the prefix='/' root
+  // can't shadow any /api/* or /healthz route declared above.
+  if (process.env.NODE_ENV === "production") {
+    const frontendRoot = path.resolve(__dirname, "../../../frontend/dist");
+    await fastify.register(fastifyStatic, {
+      root: frontendRoot,
+      prefix: "/",
+      wildcard: false
+    });
+    fastify.setNotFoundHandler((request, reply) => {
+      if (request.method === "GET" && !request.url.startsWith("/api/")) {
+        return reply.sendFile("index.html");
+      }
+      return reply.code(404).send({ error: "not_found" });
+    });
+  }
 
   await fastify.listen({ port: config.apiPort, host: "0.0.0.0" });
   log.info({ port: config.apiPort }, "api listening");

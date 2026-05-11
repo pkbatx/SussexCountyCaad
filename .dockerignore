@@ -1,0 +1,16 @@
+**/node_modules
+**/.git
+**/.env
+**/.env.*
+!**/.env.example
+runtime/
+specs/
+*.md
+!CLAUDE.md
+frontend/dist
+backend/.nyc_output
+**/.DS_Store
+**/coverage
+**/.vscode
+**/.idea
+backend/tests

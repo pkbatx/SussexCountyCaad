@@ -46,6 +46,27 @@ Required:
 
 Optional but commonly set: `AI_PROVIDER` (default `anthropic`), `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`), `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, `MAPBOX_ACCESS_TOKEN`, `MAPBOX_STYLE`, `NOTIFY_ENABLED`, `GROUPME_BOT_ID`, `DISCORD_WEBHOOK_URL`, `LOG_LEVEL`, `FRONTEND_ORIGIN` (production CORS lock), plus tuning knobs in `backend/src/config/env.js` (`GROUPING_*`, `DIGEST_*`, `RE_ALERT_*`, `FEEDBACK_*`). All config flows through `loadConfig()` — do not read `process.env` directly outside that file. `.env.example` at the repo root documents the full surface.
 
+## Production deployment (Docker)
+
+Single container — multi-stage Dockerfile builds the Vite frontend, then bakes it next to the backend source. Fastify serves `/api/*` + `/healthz` and, when `NODE_ENV=production`, also serves `frontend/dist` at `/` with SPA fallback for any non-API GET. One port (3000). SQLite lives at `/data/caad.sqlite` on a bind mount; audio at `/calls` on a read-only bind mount.
+
+Required env vars are documented in `.env.example`. The only deployment-specific var is `CALLS_HOST_DIR` (the absolute host path to audio); compose fails fast if it isn't set.
+
+Three commands an operator runs:
+
+```bash
+docker compose build
+docker compose up -d
+docker compose logs -f caad
+```
+
+Gotchas:
+
+1. **`MAPBOX_ACCESS_TOKEN` is a *build arg***, not a runtime env var. Vite inlines it into the JS bundle. Rotating the token requires `docker compose build` again — restarting the container is not enough.
+2. **`fs.watch` may lag on bind-mounted directories** (especially macOS Docker Desktop). The watcher's 10-second poll catches what `fs.watch` misses, but new files may not appear instantly.
+
+The dev workflow (`npm run dev:backend` + `npm run dev:frontend`) is unaffected — the static-serving block is gated on `NODE_ENV=production`.
+
 ## Architecture
 
 ### Backend startup (`backend/src/index.js`)
