@@ -1,0 +1,51 @@
+services:
+  caad:
+    build:
+      context: .
+      args:
+        # Vite inlines this at build time. Rebuild the image if the token changes.
+        VITE_MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN}
+    image: sussex-caad:latest
+    container_name: sussex-caad
+    ports:
+      - "3000:3000"
+    environment:
+      # Required by config/env.js — paths inside the container.
+      CALLS_DIR: /calls
+      CAAD_DB_PATH: /data/caad.sqlite
+
+      # AI providers. AI_PROVIDER=anthropic uses ANTHROPIC_API_KEY;
+      # transcription + embeddings always go through OPENAI_API_KEY.
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-gpt-4o-transcribe}
+
+      # Map — note MAPBOX_ACCESS_TOKEN is ALSO consumed as a build arg above.
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN}
+      MAPBOX_STYLE: ${MAPBOX_STYLE:-}
+
+      # Notifications
+      NOTIFY_ENABLED: ${NOTIFY_ENABLED:-false}
+      GROUPME_BOT_ID: ${GROUPME_BOT_ID:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # CORS lock in production. Defaults to allow-all in dev only.
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-}
+    volumes:
+      # Read-only host audio directory. Fail fast if it isn't set.
+      - ${CALLS_HOST_DIR:?CALLS_HOST_DIR must be set in .env or the shell}:/calls:ro
+      # Persistent SQLite DB on a bind mount so it's inspectable from the host.
+      - ./runtime/data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
